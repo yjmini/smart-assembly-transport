@@ -1,101 +1,73 @@
 # 자동 조립 공정 및 무인 배송 시스템
 
-자동 조립 공정 및 무인 배송 시스템은 음성 명령을 기반으로 컨베이어, 비전, 로봇팔, 모바일 로봇을 연동하여 제품 조립부터 목적지 배송까지의 스마트팩토리 공정을 구현하기 위한 프로젝트입니다.
+음성 명령을 기반으로 컨베이어, 비전, Dobot 로봇팔, TurtleBot을 연동하여 **제품 조립 → 품질 확인 → 무인 배송**까지 수행하는 스마트팩토리 통합 프로젝트입니다.
 
-## Structure
+본 프로젝트는 단일 기능 구현보다 여러 로봇/AI 모듈이 하나의 공정으로 연결되는 것을 목표로 합니다.
 
-```text
-server/             Backend API and WebSocket server for order/status events
-web/                Dashboard for process monitoring and emergency recovery
-ros2_ws/            ROS 2 workspace for orchestration and robot integration
-  src/
-    mission_orchestrator/   Process FSM and subsystem coordination
-    vision_detector/        YOLO/OpenCV based object, hand, and QC detection
-    conveyor_controller/    Conveyor start/stop control node
-    dobot_controller/       Dobot assembly and loading control node
-    turtlebot_delivery/     TurtleBot Nav2 delivery goal node
-    hri_interfaces/         STT/TTS and dashboard bridge interfaces
-docs/               Architecture, WBS, and project planning documents
-sample-data/        Sample images, videos, maps, and test inputs
-```
-
-## Workflow
+## 핵심 시나리오
 
 ```text
-Voice command
-  → STT order creation
-  → Dashboard / backend order registration
-  → ROS 2 mission orchestration
-  → Conveyor transport
-  → Vision-based base-part detection
-  → Dobot assembly
-  → Vision QC
-  → Dobot loading to TurtleBot
-  → TurtleBot autonomous delivery
-  → TTS and dashboard completion report
+작업자 음성 명령
+  → 작업 오더 생성
+  → 컨베이어 구동
+  → 비전 기반 베이스 부품 정위치 감지
+  → Dobot 로봇팔 조립
+  → 비전 기반 품질 확인
+  → TurtleBot 적재 및 목적지 배송
+  → TTS / 대시보드 완료 보고
 ```
 
-## Core Features
+## 주요 기능
 
-- 작업자 음성 명령 기반 작업 오더 생성
-- 컨베이어 위 부품 감지 및 정위치 정지
-- 사람 손 감지 시 비상 정지 및 관리자 비밀번호 기반 복구
+- STT 기반 작업 명령 입력
+- 컨베이어 구동 및 정위치 정지
+- YOLO/OpenCV 기반 부품·손·완성품 인식
+- 사람 손 감지 시 비상 정지 및 관리자 승인 후 복구
 - Dobot 로봇팔 기반 다단계 조립 및 적재
-- YOLO/OpenCV 기반 부품 인식과 품질 검사
-- TurtleBot3 SLAM/Nav2 기반 목적지 배송
-- WebSocket 기반 실시간 공정 상태 모니터링
-- TTS 기반 작업 완료 안내
+- TurtleBot3 SLAM/Nav2 기반 무인 배송
+- 대시보드 기반 작업 상태 모니터링
+- TTS 기반 완료/경고 안내
 
-## Quick Start
-
-### 1. ROS 2 Workspace
-
-```bash
-cd ros2_ws
-colcon build
-source install/setup.bash
-ros2 launch mission_orchestrator mock_demo.launch.py
-```
-
-### 2. Backend Server
-
-```bash
-cd server
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Health check:
-
-```bash
-curl http://localhost:8000/api/health
-```
-
-### 3. Web Dashboard
-
-```bash
-cd web
-npm install
-npm run dev -- --host 0.0.0.0
-```
-
-Open:
+## Repository Structure
 
 ```text
-http://localhost:5173
+server/             작업 오더, 상태 이벤트, WebSocket API
+web/                공정 모니터링 및 비상 복구 대시보드
+ros2_ws/            ROS 2 기반 로봇/공정 제어 워크스페이스
+  src/
+    mission_orchestrator/   전체 공정 FSM 및 모듈 통합
+    vision_detector/        부품/손/QC 비전 인식
+    conveyor_controller/    컨베이어 구동/정지 제어
+    dobot_controller/       Dobot 조립 및 적재 제어
+    turtlebot_delivery/     TurtleBot 배송 목표 제어
+    hri_interfaces/         STT/TTS 및 웹 연동 인터페이스
+docs/               프로젝트 기획, 아키텍처, 인터페이스, 일정 문서
+sample-data/        테스트 이미지, 영상, 지도, 예제 입력 데이터
 ```
 
-## Development Direction
+> 현재 repository는 프로젝트 초기 기획/설계 단계입니다. 실제 실행 명령은 각 모듈 구현 후 문서에 맞춰 추가합니다.
 
-- `ros2_ws/src/mission_orchestrator` defines the process FSM and should remain the center of integration.
-- Hardware nodes should expose the same interface in mock and real modes so the demo can fall back safely when equipment is unavailable.
-- Safety handling has priority over throughput: emergency stop must interrupt conveyor, Dobot, and delivery actions immediately.
-- Vision, conveyor, Dobot, TurtleBot, backend, and dashboard modules should be developed independently and integrated through documented ROS 2 and WebSocket interfaces.
+## Documentation
 
-## Documents
+프로젝트 상세 기획은 [`docs/`](./docs/README.md)에 정리합니다.
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Week 1 Plan](docs/WEEK1_PLAN.md)
-- [WBS / Kanban](docs/WBS.md)
+| # | 문서 | 내용 |
+|---|---|---|
+| 01 | [프로젝트 개요](./docs/01-overview.md) | 목표, 동작 요약, 범위 |
+| 02 | [시스템 아키텍처](./docs/02-architecture.md) | 전체 구조, 데이터 흐름, FSM |
+| 03 | [하드웨어 구성](./docs/03-hardware.md) | 사용 장비, 역할, 검증 항목 |
+| 04 | [기술 스택](./docs/04-tech-stack.md) | ROS 2, Vision, Web, STT/TTS |
+| 05 | [데이터 모델 / 인터페이스](./docs/05-data-model.md) | ROS 2 토픽, 이벤트, API 초안 |
+| 06 | [단계별 목표](./docs/06-stages.md) | 1주일 MVP 단계별 산출물 |
+| 07 | [역할 및 일정](./docs/07-roles-and-schedule.md) | WBS, Kanban 운영, 일정 |
+| 08 | [STT/TTS 설계](./docs/08-stt-tts.md) | 음성 명령, 응답, fallback |
+| 09 | [데모 시나리오](./docs/09-demo-scenario.md) | 시연 흐름, 촬영/발표 기준 |
+| 10 | [위험 요소](./docs/10-risks.md) | 리스크와 대응 전략 |
+| 11 | [인터페이스 합의서](./docs/11-interfaces.md) | 모듈 간 합의가 필요한 계약 |
+
+## 개발 원칙
+
+- 공정 전체 흐름을 먼저 mock으로 연결한 뒤 실제 하드웨어 노드로 교체합니다.
+- 안전 정지는 모든 기능보다 우선합니다.
+- ROS 2 인터페이스와 상태 이벤트는 초기에 고정하고 문서 변경 없이 임의 수정하지 않습니다.
+- 데모 성공을 위해 실제 장비 실패 시 사용할 fallback 경로를 항상 유지합니다.
