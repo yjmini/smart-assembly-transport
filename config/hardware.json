@@ -1,0 +1,48 @@
+{
+  "mode": "real",
+  "conveyor": {
+    "ssh_user": "ssafy",
+    "host": "192.168.110.142",
+    "ssh_port": 22,
+    "remote_python": "python3",
+    "remote_script": "~/smart-assembly-transport-edge/conveyor_control.py",
+    "start_args": ["start"],
+    "stop_args": ["stop"],
+    "emergency_stop_args": ["emergency-stop"],
+    "status_args": ["status"],
+    "connect_timeout_sec": 5
+  },
+  "turtlebot": {
+    "ssh_user": "turtlebot4",
+    "host": "192.168.110.174",
+    "ssh_port": 22,
+    "ros_domain_id": 34,
+    "ros_setup": "/opt/ros/humble/setup.bash",
+    "workspace_setup": "~/turtlebot4_ws/install/setup.bash",
+    "nav_action": "/navigate_to_pose",
+    "map_frame": "map",
+    "targets": {
+      "A": {"x": 1.2, "y": 0.0, "yaw": 0.0},
+      "B": {"x": 0.0, "y": 1.2, "yaw": 1.5708}
+    },
+    "connect_timeout_sec": 5
+  },
+  "dobot": {
+    "mode": "ros2_action",
+    "ptp_action": "PTP_action",
+    "motion_type": 1,
+    "safe_z_mm": 20.0,
+    "pick_z_mm": -31.77
+  },
+  "vision": {
+    "camera_topic": "/camera/camera/color/image_raw",
+    "base_color": "yellow",
+    "min_area": 1000.0,
+    "hand_color": "skin"
+  },
+  "dashboard": {
+    "websocket_host": "0.0.0.0",
+    "websocket_port": 8765,
+    "http_port": 3000
+  }
+}
