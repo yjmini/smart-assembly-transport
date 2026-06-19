@@ -1,0 +1,1 @@
+{"type":"order.create","command":"assemble and deliver to A","destination":"A","parts":["base","top"]}
