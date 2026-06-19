@@ -6,172 +6,81 @@
   <title>Smart Assembly Transport Dashboard</title>
   <style>
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, Arial, sans-serif;
-      background: #0b1020;
-      color: #e8eefc;
-    }
-    .app { min-height: 100vh; padding: 28px; }
-    .topbar { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 24px; }
-    h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
-    .subtitle { margin-top: 6px; color: #9aa8c7; }
-    .status-pill { padding: 10px 14px; border-radius: 999px; background: #1c2744; border: 1px solid #33466f; font-weight: 700; }
-    .status-pill.connected { background: #073d2b; border-color: #1faf75; color: #9ff2c9; }
-    .status-pill.error { background: #46151c; border-color: #ff5a6d; color: #ffc0c8; }
-    .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
-    .card { background: rgba(18, 27, 51, .9); border: 1px solid #223052; border-radius: 22px; padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.28); }
-    .card h2 { margin: 0 0 16px; font-size: 18px; }
-    .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    button, select, input {
-      font: inherit;
-      border: 0;
-      border-radius: 14px;
-      padding: 13px 14px;
-    }
-    button { cursor: pointer; color: white; background: #3155ff; font-weight: 800; transition: transform .12s ease, filter .12s ease; }
-    button:hover { transform: translateY(-1px); filter: brightness(1.08); }
-    button.secondary { background: #283552; }
-    button.danger { background: #e9354f; }
-    button.safe { background: #149363; }
-    select, input { background: #0f1730; color: #e8eefc; border: 1px solid #27375f; }
-    .pipeline { display: grid; gap: 10px; }
-    .step { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; background: #0f1730; border: 1px solid #26375f; color: #8fa0c4; }
-    .step .num { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #223052; color: #9aa8c7; font-size: 13px; font-weight: 900; }
-    .step.active { border-color: #78a6ff; color: #fff; background: linear-gradient(90deg, #172b65, #101a36); }
-    .step.done { border-color: #1faf75; color: #abf6d0; }
-    .step.done .num { background: #0f6a49; color: white; }
-    .command { font-size: 12px; color: #9aa8c7; }
-    .log { height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 9px; padding-right: 4px; }
-    .log-row { padding: 10px 12px; border-radius: 12px; background: #0f1730; border: 1px solid #223052; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: #c6d3ef; }
-    .placeholder { color: #f7d774; background: #33290f; border: 1px solid #66511b; padding: 12px; border-radius: 14px; line-height: 1.55; }
-    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-    @media (max-width: 900px) { .grid, .controls, .split { grid-template-columns: 1fr; } .app { padding: 16px; } }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, Arial, sans-serif; background: #08111f; color: #e8eefc; }
+    .app { min-height: 100vh; padding: 26px; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:20px; }
+    h1 { margin:0; font-size:28px; letter-spacing:-.04em; } h2 { margin:0 0 14px; font-size:17px; }
+    .subtitle { color:#95a6c7; margin-top:6px; }
+    .status-pill { padding:10px 14px; border-radius:999px; background:#18253f; border:1px solid #33466f; font-weight:800; }
+    .connected { background:#063b2b; border-color:#20c77d; color:#a9f7d1; } .error { background:#46151c; border-color:#ff5a6d; color:#ffc0c8; }
+    .layout { display:grid; grid-template-columns: 1.1fr .9fr; gap:18px; }
+    .card { background:rgba(17,28,52,.92); border:1px solid #23375d; border-radius:22px; padding:20px; box-shadow:0 22px 70px rgba(0,0,0,.3); }
+    .controls, .mini-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    button, select, input { font:inherit; border:0; border-radius:13px; padding:12px 13px; }
+    button { cursor:pointer; color:white; background:#3155ff; font-weight:850; } button:hover { filter:brightness(1.08); transform:translateY(-1px); }
+    button.secondary { background:#263653; } button.danger { background:#e9354f; } button.safe { background:#149363; } button.real { background:#8754ff; } button.warn { background:#c98319; }
+    select,input { background:#0c162b; color:#e8eefc; border:1px solid #2a3c63; }
+    .pipeline { display:grid; gap:9px; }
+    .step { display:grid; grid-template-columns:30px 1fr auto; gap:10px; align-items:center; padding:11px; border-radius:15px; background:#0c162b; border:1px solid #273b62; color:#91a2c3; }
+    .step .num { width:26px; height:26px; display:grid; place-items:center; border-radius:50%; background:#223052; color:#9aa8c7; font-size:12px; font-weight:900; }
+    .step.active { border-color:#79a9ff; color:white; background:linear-gradient(90deg,#17316f,#0e1a33); } .step.done { border-color:#1faf75; color:#abf6d0; }
+    .step.done .num { background:#0f6a49; color:white; }
+    .tag { font-size:12px; color:#9aa8c7; }
+    .log { height:370px; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
+    .log-row { white-space:pre-wrap; padding:10px 12px; border-radius:12px; background:#0c162b; border:1px solid #22375d; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; color:#c6d3ef; }
+    .hardware { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:18px; }
+    .hw { padding:14px; border-radius:16px; background:#0c162b; border:1px solid #273b62; min-height:110px; }
+    .hw b { display:block; margin-bottom:7px; } .hw code { color:#9ff2c9; }
+    .notice { margin:12px 0 0; color:#ffd98a; background:#34280c; border:1px solid #6b5319; padding:12px; border-radius:14px; line-height:1.5; }
+    label.toggle { display:flex; gap:8px; align-items:center; padding:12px; border-radius:14px; background:#0c162b; border:1px solid #2a3c63; }
+    label.toggle input { width:auto; }
+    @media (max-width:1000px){ .layout,.hardware,.controls,.mini-grid{grid-template-columns:1fr;} .app{padding:15px;} }
   </style>
 </head>
 <body>
-  <main class="app">
-    <header class="topbar">
-      <div>
-        <h1>STT 연동 컨베이어 · 로봇팔 · 무인배송 Dashboard</h1>
-        <div class="subtitle">하드웨어 없이 WebSocket mock event로 전체 공정 흐름을 확인하는 UI</div>
+<main class="app">
+  <header class="topbar">
+    <div><h1>Smart Assembly Transport Control Center</h1><div class="subtitle">Mock 검증 + 실제 Conveyor Pi / TurtleBot4 연동 준비 대시보드</div></div>
+    <div id="connection" class="status-pill">DISCONNECTED</div>
+  </header>
+  <section class="layout">
+    <div class="card"><h2>공정 상태</h2><div id="pipeline" class="pipeline"></div></div>
+    <div class="card">
+      <h2>작업 제어</h2>
+      <div class="controls">
+        <select id="destination"><option value="A">A 구역 배송</option><option value="B">B 구역 배송</option></select>
+        <button id="connectBtn" class="secondary">WebSocket 연결</button>
+        <button id="startBtn">Mock 작업 시작</button>
+        <button id="nextBtn" class="secondary">다음 mock 이벤트</button>
+        <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
+        <button id="unlockBtn" class="safe">관리자 Unlock</button>
+        <button id="hwStatusBtn" class="real">실제 하드웨어 구성 불러오기</button>
+        <button id="hwPlanBtn" class="real">실제 파이프라인 계획 보기</button>
+        <button id="hwRunBtn" class="warn">실제 order plan 실행</button>
+        <button id="resetBtn" class="secondary">UI 로그 초기화</button>
       </div>
-      <div id="connection" class="status-pill">DISCONNECTED</div>
-    </header>
-
-    <section class="grid">
-      <div class="card">
-        <h2>공정 상태</h2>
-        <div id="pipeline" class="pipeline"></div>
-      </div>
-
-      <div class="card">
-        <h2>작업 제어</h2>
-        <div class="controls">
-          <select id="destination">
-            <option value="A">A 구역 배송</option>
-            <option value="B">B 구역 배송</option>
-          </select>
-          <button id="connectBtn" class="secondary">WebSocket 연결</button>
-          <button id="startBtn">작업 시작</button>
-          <button id="nextBtn" class="secondary">다음 mock 이벤트</button>
-          <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
-          <button id="unlockBtn" class="safe">관리자 Unlock</button>
-        </div>
-        <div class="split">
-          <input id="serverUrl" value="ws://127.0.0.1:8765" />
-          <button id="resetBtn" class="secondary">UI 로그 초기화</button>
-        </div>
-        <p class="placeholder">
-          현재 Dobot 좌표, TurtleBot 목적지, HSV 범위는 실제 장비값이 아니라 mock/reference 값입니다.
-          상세 목록은 <code>docs/12-placeholder-hardware-values.md</code>에 정리되어 있습니다.
-        </p>
-      </div>
-    </section>
-
-    <section class="card" style="margin-top:20px">
-      <h2>WebSocket 이벤트 로그</h2>
-      <div id="log" class="log"></div>
-    </section>
-  </main>
-
+      <div class="mini-grid" style="margin-top:10px"><input id="serverUrl" value="ws://127.0.0.1:8765" /><label class="toggle"><input id="executeToggle" type="checkbox" /> 실제 명령 실행 모드</label></div>
+      <p class="notice">기본은 DRY-RUN입니다. 실제 명령 실행 모드를 켜야 SSH 명령이 Conveyor Pi/TurtleBot으로 전송됩니다.</p>
+    </div>
+  </section>
+  <section class="hardware" id="hardwareCards"></section>
+  <section class="card" style="margin-top:18px"><h2>이벤트 / 하드웨어 로그</h2><div id="log" class="log"></div></section>
+</main>
 <script>
-const states = [
-  ['ORDER_RECEIVED', '작업 명령 수신'],
-  ['CONVEYOR_MOVING', '컨베이어 동작'],
-  ['BASE_DETECTED_STOPPING', '베이스 정위치 감지 / 정지 요청'],
-  ['ASSEMBLY_STAGE_1', 'Dobot A 부품 pick & place'],
-  ['ASSEMBLY_STAGE_2', 'Dobot B 부품 stack'],
-  ['QC_CHECK', '비전 품질 확인'],
-  ['LOADING_TO_TURTLEBOT', 'TurtleBot 적재'],
-  ['DELIVERY_NAVIGATING', 'Nav2 배송 이동'],
-  ['DELIVERED', '배송 완료'],
-];
-const mockEvents = [
-  {type:'event', event:'conveyor.started'},
-  {type:'event', event:'vision.base_in_position'},
-  {type:'event', event:'conveyor.stopped'},
-  {type:'event', event:'dobot.assembly_stage_1_done'},
-  {type:'event', event:'dobot.assembly_stage_2_done'},
-  {type:'event', event:'vision.qc_passed'},
-  {type:'event', event:'dobot.loaded_to_turtlebot'},
-  {type:'event', event:'turtlebot.delivery_arrived'},
-];
-let ws = null;
-let currentState = null;
-let eventIndex = 0;
-
-const $ = (id) => document.getElementById(id);
-function renderPipeline() {
-  const currentIdx = states.findIndex(([s]) => s === currentState);
-  $('pipeline').innerHTML = states.map(([state, label], idx) => {
-    const cls = idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : '';
-    return `<div class="step ${cls}"><div class="num">${idx+1}</div><div><b>${label}</b><div class="command">${state}</div></div><div>${idx < currentIdx ? '완료' : idx === currentIdx ? '진행중' : '대기'}</div></div>`;
-  }).join('');
-}
-function log(msg, data) {
-  const row = document.createElement('div');
-  row.className = 'log-row';
-  row.textContent = `${new Date().toLocaleTimeString()} ${msg}` + (data ? ` ${JSON.stringify(data)}` : '');
-  $('log').prepend(row);
-}
-function setConnection(text, cls='') {
-  const el = $('connection');
-  el.className = `status-pill ${cls}`;
-  el.textContent = text;
-}
-async function connect() {
-  if (ws && ws.readyState === WebSocket.OPEN) return;
-  ws = new WebSocket($('serverUrl').value);
-  ws.onopen = () => { setConnection('CONNECTED', 'connected'); log('connected'); };
-  ws.onerror = () => { setConnection('ERROR', 'error'); log('websocket error'); };
-  ws.onclose = () => { setConnection('DISCONNECTED'); log('disconnected'); };
-  ws.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
-    if (data.state) currentState = data.state;
-    log('recv', data);
-    renderPipeline();
-  };
-}
-function send(msg) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) { log('먼저 WebSocket 연결을 누르세요'); return; }
-  log('send', msg);
-  ws.send(JSON.stringify(msg));
-}
-$('connectBtn').onclick = connect;
-$('startBtn').onclick = async () => {
-  await connect();
-  eventIndex = 0;
-  send({type:'order.create', command:'A 물체를 컨베이어에 올리고 B 물체를 그 위에 조립한 뒤 배송', destination:$('destination').value, parts:['base','top']});
-};
-$('nextBtn').onclick = () => {
-  if (eventIndex >= mockEvents.length) { log('더 이상 보낼 mock 이벤트가 없습니다'); return; }
-  send(mockEvents[eventIndex++]);
-};
-$('stopBtn').onclick = () => send({type:'event', event:'safety.hand_detected', payload:{source:'dashboard_mock'}});
-$('unlockBtn').onclick = () => send({type:'admin.unlock', admin:'operator'});
-$('resetBtn').onclick = () => { $('log').innerHTML=''; currentState=null; eventIndex=0; renderPipeline(); };
-renderPipeline();
+const states=[['ORDER_RECEIVED','작업 명령 수신'],['CONVEYOR_MOVING','컨베이어 동작'],['BASE_DETECTED_STOPPING','베이스 정위치 감지 / 정지 요청'],['ASSEMBLY_STAGE_1','Dobot A 부품 pick & place'],['ASSEMBLY_STAGE_2','Dobot B 부품 stack'],['QC_CHECK','비전 품질 확인'],['LOADING_TO_TURTLEBOT','TurtleBot 적재'],['DELIVERY_NAVIGATING','Nav2 배송 이동'],['DELIVERED','배송 완료']];
+const mockEvents=[{type:'event',event:'conveyor.started'},{type:'event',event:'vision.base_in_position'},{type:'event',event:'conveyor.stopped'},{type:'event',event:'dobot.assembly_stage_1_done'},{type:'event',event:'dobot.assembly_stage_2_done'},{type:'event',event:'vision.qc_passed'},{type:'event',event:'dobot.loaded_to_turtlebot'},{type:'event',event:'turtlebot.delivery_arrived'}];
+let ws=null,currentState=null,eventIndex=0; const $=id=>document.getElementById(id);
+function renderPipeline(){const idx=states.findIndex(([s])=>s===currentState);$('pipeline').innerHTML=states.map(([s,l],i)=>`<div class="step ${i<idx?'done':i===idx?'active':''}"><div class="num">${i+1}</div><div><b>${l}</b><div class="tag">${s}</div></div><div>${i<idx?'완료':i===idx?'진행중':'대기'}</div></div>`).join('')}
+function log(msg,data){const row=document.createElement('div');row.className='log-row';row.textContent=`${new Date().toLocaleTimeString()} ${msg}`+(data?`\n${JSON.stringify(data,null,2)}`:'');$('log').prepend(row)}
+function setConn(t,c=''){const el=$('connection');el.className=`status-pill ${c}`;el.textContent=t}
+async function connect(){if(ws&&ws.readyState===WebSocket.OPEN)return;ws=new WebSocket($('serverUrl').value);ws.onopen=()=>{setConn('CONNECTED','connected');log('connected')};ws.onerror=()=>{setConn('ERROR','error');log('websocket error')};ws.onclose=()=>{setConn('DISCONNECTED');log('disconnected')};ws.onmessage=ev=>{const d=JSON.parse(ev.data);if(d.state)currentState=d.state;if(d.type==='hardware.status'||d.type==='hardware.pipeline')renderHardware(d);log('recv',d);renderPipeline();};}
+function send(msg){if(!ws||ws.readyState!==WebSocket.OPEN){log('먼저 WebSocket 연결을 누르세요');return;}log('send',msg);ws.send(JSON.stringify(msg));}
+function renderHardware(data){let s=data.type==='hardware.pipeline'?data:data; const cards=[]; if(s.conveyor)cards.push(['Conveyor Pi',s.conveyor.target||s.conveyor.host,`SSH ${s.conveyor.ssh_port||22}`]); if(s.turtlebot)cards.push(['TurtleBot4',s.turtlebot.target||s.turtlebot.host,`ROS_DOMAIN_ID=${s.turtlebot.ros_domain_id}`]); if(s.dobot)cards.push(['Dobot',s.dobot.action_name||s.dobot.ptp_action||s.dobot.mode,`${(s.dobot.target_poses||[]).length||'PTP'} steps`]); if(s.vision)cards.push(['Vision',s.vision.camera_topic||'camera',`base=${s.vision.base_color||'yellow'}`]); $('hardwareCards').innerHTML=cards.map(([a,b,c])=>`<div class="hw"><b>${a}</b><code>${b}</code><div class="tag">${c}</div></div>`).join('');}
+$('connectBtn').onclick=connect;$('startBtn').onclick=async()=>{await connect();eventIndex=0;send({type:'order.create',command:'A 물체를 컨베이어에 올리고 B 물체를 그 위에 조립한 뒤 배송',destination:$('destination').value,parts:['base','top']})};
+$('nextBtn').onclick=()=>{if(eventIndex>=mockEvents.length){log('더 이상 보낼 mock 이벤트가 없습니다');return;}send(mockEvents[eventIndex++])};
+$('stopBtn').onclick=()=>send({type:'event',event:'safety.hand_detected',payload:{source:'dashboard'}});$('unlockBtn').onclick=()=>send({type:'admin.unlock',admin:'operator'});
+$('hwStatusBtn').onclick=()=>send({type:'hardware.status'});$('hwPlanBtn').onclick=()=>send({type:'hardware.pipeline'});$('hwRunBtn').onclick=()=>send({type:'hardware.run_order_plan',destination:$('destination').value,execute:$('executeToggle').checked});
+$('resetBtn').onclick=()=>{$('log').innerHTML='';currentState=null;eventIndex=0;renderPipeline()};renderPipeline();
 </script>
 </body>
 </html>
