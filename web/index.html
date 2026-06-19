@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Assembly Transport Dashboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, Arial, sans-serif;
+      background: #0b1020;
+      color: #e8eefc;
+    }
+    .app { min-height: 100vh; padding: 28px; }
+    .topbar { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
+    .subtitle { margin-top: 6px; color: #9aa8c7; }
+    .status-pill { padding: 10px 14px; border-radius: 999px; background: #1c2744; border: 1px solid #33466f; font-weight: 700; }
+    .status-pill.connected { background: #073d2b; border-color: #1faf75; color: #9ff2c9; }
+    .status-pill.error { background: #46151c; border-color: #ff5a6d; color: #ffc0c8; }
+    .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
+    .card { background: rgba(18, 27, 51, .9); border: 1px solid #223052; border-radius: 22px; padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.28); }
+    .card h2 { margin: 0 0 16px; font-size: 18px; }
+    .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    button, select, input {
+      font: inherit;
+      border: 0;
+      border-radius: 14px;
+      padding: 13px 14px;
+    }
+    button { cursor: pointer; color: white; background: #3155ff; font-weight: 800; transition: transform .12s ease, filter .12s ease; }
+    button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    button.secondary { background: #283552; }
+    button.danger { background: #e9354f; }
+    button.safe { background: #149363; }
+    select, input { background: #0f1730; color: #e8eefc; border: 1px solid #27375f; }
+    .pipeline { display: grid; gap: 10px; }
+    .step { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; background: #0f1730; border: 1px solid #26375f; color: #8fa0c4; }
+    .step .num { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #223052; color: #9aa8c7; font-size: 13px; font-weight: 900; }
+    .step.active { border-color: #78a6ff; color: #fff; background: linear-gradient(90deg, #172b65, #101a36); }
+    .step.done { border-color: #1faf75; color: #abf6d0; }
+    .step.done .num { background: #0f6a49; color: white; }
+    .command { font-size: 12px; color: #9aa8c7; }
+    .log { height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 9px; padding-right: 4px; }
+    .log-row { padding: 10px 12px; border-radius: 12px; background: #0f1730; border: 1px solid #223052; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: #c6d3ef; }
+    .placeholder { color: #f7d774; background: #33290f; border: 1px solid #66511b; padding: 12px; border-radius: 14px; line-height: 1.55; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    @media (max-width: 900px) { .grid, .controls, .split { grid-template-columns: 1fr; } .app { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>STT 연동 컨베이어 · 로봇팔 · 무인배송 Dashboard</h1>
+        <div class="subtitle">하드웨어 없이 WebSocket mock event로 전체 공정 흐름을 확인하는 UI</div>
+      </div>
+      <div id="connection" class="status-pill">DISCONNECTED</div>
+    </header>
+
+    <section class="grid">
+      <div class="card">
+        <h2>공정 상태</h2>
+        <div id="pipeline" class="pipeline"></div>
+      </div>
+
+      <div class="card">
+        <h2>작업 제어</h2>
+        <div class="controls">
+          <select id="destination">
+            <option value="A">A 구역 배송</option>
+            <option value="B">B 구역 배송</option>
+          </select>
+          <button id="connectBtn" class="secondary">WebSocket 연결</button>
+          <button id="startBtn">작업 시작</button>
+          <button id="nextBtn" class="secondary">다음 mock 이벤트</button>
+          <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
+          <button id="unlockBtn" class="safe">관리자 Unlock</button>
+        </div>
+        <div class="split">
+          <input id="serverUrl" value="ws://127.0.0.1:8765" />
+          <button id="resetBtn" class="secondary">UI 로그 초기화</button>
+        </div>
+        <p class="placeholder">
+          현재 Dobot 좌표, TurtleBot 목적지, HSV 범위는 실제 장비값이 아니라 mock/reference 값입니다.
+          상세 목록은 <code>docs/12-placeholder-hardware-values.md</code>에 정리되어 있습니다.
+        </p>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:20px">
+      <h2>WebSocket 이벤트 로그</h2>
+      <div id="log" class="log"></div>
+    </section>
+  </main>
+
+<script>
+const states = [
+  ['ORDER_RECEIVED', '작업 명령 수신'],
+  ['CONVEYOR_MOVING', '컨베이어 동작'],
+  ['BASE_DETECTED_STOPPING', '베이스 정위치 감지 / 정지 요청'],
+  ['ASSEMBLY_STAGE_1', 'Dobot A 부품 pick & place'],
+  ['ASSEMBLY_STAGE_2', 'Dobot B 부품 stack'],
+  ['QC_CHECK', '비전 품질 확인'],
+  ['LOADING_TO_TURTLEBOT', 'TurtleBot 적재'],
+  ['DELIVERY_NAVIGATING', 'Nav2 배송 이동'],
+  ['DELIVERED', '배송 완료'],
+];
+const mockEvents = [
+  {type:'event', event:'conveyor.started'},
+  {type:'event', event:'vision.base_in_position'},
+  {type:'event', event:'conveyor.stopped'},
+  {type:'event', event:'dobot.assembly_stage_1_done'},
+  {type:'event', event:'dobot.assembly_stage_2_done'},
+  {type:'event', event:'vision.qc_passed'},
+  {type:'event', event:'dobot.loaded_to_turtlebot'},
+  {type:'event', event:'turtlebot.delivery_arrived'},
+];
+let ws = null;
+let currentState = null;
+let eventIndex = 0;
+
+const $ = (id) => document.getElementById(id);
+function renderPipeline() {
+  const currentIdx = states.findIndex(([s]) => s === currentState);
+  $('pipeline').innerHTML = states.map(([state, label], idx) => {
+    const cls = idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : '';
+    return `<div class="step ${cls}"><div class="num">${idx+1}</div><div><b>${label}</b><div class="command">${state}</div></div><div>${idx < currentIdx ? '완료' : idx === currentIdx ? '진행중' : '대기'}</div></div>`;
+  }).join('');
+}
+function log(msg, data) {
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.textContent = `${new Date().toLocaleTimeString()} ${msg}` + (data ? ` ${JSON.stringify(data)}` : '');
+  $('log').prepend(row);
+}
+function setConnection(text, cls='') {
+  const el = $('connection');
+  el.className = `status-pill ${cls}`;
+  el.textContent = text;
+}
+async function connect() {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+  ws = new WebSocket($('serverUrl').value);
+  ws.onopen = () => { setConnection('CONNECTED', 'connected'); log('connected'); };
+  ws.onerror = () => { setConnection('ERROR', 'error'); log('websocket error'); };
+  ws.onclose = () => { setConnection('DISCONNECTED'); log('disconnected'); };
+  ws.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    if (data.state) currentState = data.state;
+    log('recv', data);
+    renderPipeline();
+  };
+}
+function send(msg) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) { log('먼저 WebSocket 연결을 누르세요'); return; }
+  log('send', msg);
+  ws.send(JSON.stringify(msg));
+}
+$('connectBtn').onclick = connect;
+$('startBtn').onclick = async () => {
+  await connect();
+  eventIndex = 0;
+  send({type:'order.create', command:'A 물체를 컨베이어에 올리고 B 물체를 그 위에 조립한 뒤 배송', destination:$('destination').value, parts:['base','top']});
+};
+$('nextBtn').onclick = () => {
+  if (eventIndex >= mockEvents.length) { log('더 이상 보낼 mock 이벤트가 없습니다'); return; }
+  send(mockEvents[eventIndex++]);
+};
+$('stopBtn').onclick = () => send({type:'event', event:'safety.hand_detected', payload:{source:'dashboard_mock'}});
+$('unlockBtn').onclick = () => send({type:'admin.unlock', admin:'operator'});
+$('resetBtn').onclick = () => { $('log').innerHTML=''; currentState=null; eventIndex=0; renderPipeline(); };
+renderPipeline();
+</script>
+</body>
+</html>

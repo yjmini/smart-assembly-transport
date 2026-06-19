@@ -33,7 +33,7 @@
 ```text
 server/             작업 오더, 상태 이벤트, WebSocket API
 web/                공정 모니터링 및 비상 복구 대시보드
-ros2_ws/            ROS 2 기반 로봇/공정 제어 워크스페이스
+sem1_pjt_ws/        ROS 2 기반 로봇/공정 제어 워크스페이스
   src/
     mission_orchestrator/   전체 공정 FSM 및 모듈 통합
     vision_detector/        부품/손/QC 비전 인식
@@ -45,7 +45,22 @@ docs/               프로젝트 기획, 아키텍처, 인터페이스, 일정 �
 sample-data/        테스트 이미지, 영상, 지도, 예제 입력 데이터
 ```
 
-> 현재 repository는 프로젝트 초기 기획/설계 단계입니다. 실제 실행 명령은 각 모듈 구현 후 문서에 맞춰 추가합니다.
+> 현재 repository는 하드웨어 없이도 mock 공정 흐름을 먼저 검증할 수 있도록 `sem1_pjt_ws` 기반 Python/ROS 2 scaffold와 WebSocket bridge 초안을 포함합니다.
+
+## Local Mock Quick Start
+
+```bash
+cd /home/ssafy/smart-assembly-transport
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest -q
+python3 -m sem1_pjt_ws.src.mission_orchestrator.mission_orchestrator.mock_runner
+```
+
+WebSocket bridge는 다음으로 실행합니다.
+
+```bash
+python3 -m server.app
+```
 
 ## Documentation
 
@@ -64,6 +79,8 @@ sample-data/        테스트 이미지, 영상, 지도, 예제 입력 데이터
 | 09 | [데모 시나리오](./docs/09-demo-scenario.md) | 시연 흐름, 촬영/발표 기준 |
 | 10 | [위험 요소](./docs/10-risks.md) | 리스크와 대응 전략 |
 | 11 | [인터페이스 합의서](./docs/11-interfaces.md) | 모듈 간 합의가 필요한 계약 |
+| 12 | [하드웨어 임의값 목록](./docs/12-placeholder-hardware-values.md) | 실측/보정이 필요한 mock 좌표와 설정 |
+| 13 | [로컬 Mock 실행 가이드](./docs/13-local-mock-runbook.md) | 테스트, mock runner, WebSocket 실행 |
 
 ## 개발 원칙
 

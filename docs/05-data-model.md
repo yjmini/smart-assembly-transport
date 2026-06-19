@@ -18,10 +18,13 @@
 
 ```json
 {
-  "order_id": "20260618-001",
+  "type": "factory.state",
   "state": "ASSEMBLY_STAGE_1",
-  "severity": "info",
   "message": "1단계 조립 중",
+  "payload": {
+    "order_id": "20260618-001",
+    "severity": "info"
+  },
   "timestamp": "2026-06-18T12:00:00+09:00"
 }
 ```
@@ -56,12 +59,14 @@
 
 ```json
 {
-  "type": "factory_state",
-  "data": {
+  "type": "factory.state",
+  "state": "CONVEYOR_MOVING",
+  "message": "컨베이어 동작 중",
+  "payload": {
     "order_id": "20260618-001",
-    "state": "CONVEYOR_MOVING",
-    "message": "컨베이어 동작 중"
-  }
+    "command": null
+  },
+  "timestamp": "2026-06-18T12:00:00+09:00"
 }
 ```
 
@@ -69,11 +74,41 @@
 
 ```json
 {
-  "type": "admin_unlock",
-  "data": {
-    "password": "****",
-    "target_order_id": "20260618-001"
-  }
+  "type": "admin.unlock",
+  "admin": "operator",
+  "password": "****",
+  "target_order_id": "20260618-001"
+}
+```
+
+### Dashboard/STT → Server 작업 생성
+
+```json
+{
+  "type": "order.create",
+  "command": "제품 조립 후 A구역으로 배송해",
+  "destination": "A",
+  "parts": ["base", "top"]
+}
+```
+
+### Mock 이벤트 주입
+
+```json
+{
+  "type": "event",
+  "event": "vision.base_in_position",
+  "payload": {"source": "mock"}
+}
+```
+
+컨베이어 정지 완료처럼 실제 장비 callback을 대체해야 하는 경우도 같은 형식으로 주입합니다.
+
+```json
+{
+  "type": "event",
+  "event": "conveyor.stopped",
+  "payload": {"source": "mock"}
 }
 ```
 

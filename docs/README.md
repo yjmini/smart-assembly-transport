@@ -17,6 +17,8 @@
 | 09 | [09-demo-scenario.md](./09-demo-scenario.md) | 최종 데모 시나리오, 촬영 순서, 발표 포인트 |
 | 10 | [10-risks.md](./10-risks.md) | 위험 매트릭스, 우선 검증 체크리스트 |
 | 11 | [11-interfaces.md](./11-interfaces.md) | 모듈 간 인터페이스 합의서 |
+| 12 | [12-placeholder-hardware-values.md](./12-placeholder-hardware-values.md) | 하드웨어 임의값 / 추후 실측 필요 목록 |
+| 13 | [13-local-mock-runbook.md](./13-local-mock-runbook.md) | 하드웨어 없이 로컬에서 mock 공정 검증 |
 
 ## 빠른 요약
 
