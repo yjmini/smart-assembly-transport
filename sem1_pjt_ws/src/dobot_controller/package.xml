@@ -6,6 +6,9 @@
   <maintainer email="u79jm@koreatech.ac.kr">yjmini</maintainer>
   <license>MIT</license>
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>dobot_msgs</exec_depend>
   <test_depend>pytest</test_depend>
   <export><build_type>ament_python</build_type></export>
 </package>

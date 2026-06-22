@@ -13,5 +13,9 @@ setup(
     maintainer_email="u79jm@koreatech.ac.kr",
     description="Mock-first package for smart assembly transport MVP.",
     license="MIT",
-    entry_points={"console_scripts": []},
+    entry_points={
+        "console_scripts": [
+            "two_object_pick_place = dobot_controller.realsense_pick_place:main",
+        ]
+    },
 )
