@@ -108,6 +108,40 @@ PTP_action
 
 만약 `ros2 launch dobot_bringup ...` 실행 후에도 `PTP_action`이 계속 보이지 않으면, bringup 터미널 로그에서 serial port 연결 실패, permission denied, Dobot 전원/USB 연결 문제, action server 기동 실패 메시지를 먼저 확인합니다.
 
+### `np.maximum_sctype` / NumPy 2.x 오류가 나는 경우
+
+다음과 같은 로그가 나오면 Dobot 자체보다 Python 의존성 충돌 문제입니다.
+
+```text
+AttributeError: `np.maximum_sctype` was removed in the NumPy 2.0 release
+```
+
+원인은 `tf_transformations -> transforms3d`가 `~/.local/lib/python3.10/site-packages/numpy`의 NumPy 2.x를 잡고 있는데, 현재 설치된 `transforms3d`가 NumPy 2.x에서 제거된 API를 사용하기 때문입니다. 이 경우 `PTP_server`, `trajectory_validator_server`, `state_publisher`가 죽어서 `PTP_action`이 나타나지 않습니다.
+
+가장 단순한 조치:
+
+```bash
+python3 -m pip install --user --force-reinstall 'numpy<2'
+```
+
+설치 후 새 터미널을 열고 다시 확인합니다.
+
+```bash
+python3 - <<'PY'
+import numpy as np
+import transforms3d
+print('numpy', np.__version__, np.__file__)
+print('transforms3d', transforms3d.__file__)
+PY
+```
+
+`numpy`가 `1.x`로 나오면 Dobot bringup을 다시 실행합니다.
+
+```bash
+ros2 launch dobot_bringup dobot_magician_control_system.launch.py
+ros2 action list | grep PTP_action
+```
+
 ## 5. RealSense detector 실행
 
 새 터미널:
