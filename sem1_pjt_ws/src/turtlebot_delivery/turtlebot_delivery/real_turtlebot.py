@@ -70,6 +70,9 @@ class TurtleBotCommandBuilder:
         )
         return ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={self.config.connect_timeout_sec}", "-p", str(self.config.ssh_port), self.config.target, remote]
 
+    def return_home_command(self) -> list[str]:
+        return self.navigate_command(self.config.home_destination)
+
 
 class RealTurtleBotDelivery:
     def __init__(self, config: TurtleBotConfig, *, execute: bool = False) -> None:
@@ -78,6 +81,9 @@ class RealTurtleBotDelivery:
 
     def navigate(self, destination: str) -> CommandResult:
         return self.runner.run(self.builder.navigate_command(destination))
+
+    def return_home(self) -> CommandResult:
+        return self.runner.run(self.builder.return_home_command())
 
     def status(self) -> CommandResult:
         return self.runner.run(self.builder.status_command())

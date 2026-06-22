@@ -19,6 +19,8 @@
 | 11 | [11-interfaces.md](./11-interfaces.md) | 모듈 간 인터페이스 합의서 |
 | 12 | [12-placeholder-hardware-values.md](./12-placeholder-hardware-values.md) | 하드웨어 임의값 / 추후 실측 필요 목록 |
 | 13 | [13-local-mock-runbook.md](./13-local-mock-runbook.md) | 하드웨어 없이 로컬에서 mock 공정 검증 |
+| 14 | [14-real-hardware-runbook.md](./14-real-hardware-runbook.md) | 실제 Conveyor/TurtleBot/Dobot dry-run 및 실행 |
+| 15 | [15-reference-adaptation.md](./15-reference-adaptation.md) | project_pill 참고 패턴을 우리 프로젝트에 맞게 적용한 기준 |
 
 ## 빠른 요약
 

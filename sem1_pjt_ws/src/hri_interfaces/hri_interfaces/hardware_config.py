@@ -44,6 +44,7 @@ class TurtleBotConfig:
     workspace_setup: str = "~/turtlebot4_ws/install/setup.bash"
     nav_action: str = "/navigate_to_pose"
     map_frame: str = "map"
+    home_destination: str = "HOME"
     targets: dict[str, DeliveryPose] | None = None
     connect_timeout_sec: int = 5
 
@@ -115,6 +116,7 @@ class HardwareConfig:
                 "host": self.turtlebot.host,
                 "ssh_port": self.turtlebot.ssh_port,
                 "ros_domain_id": self.turtlebot.ros_domain_id,
+                "home_destination": self.turtlebot.home_destination,
                 "targets": {k: vars(v) for k, v in (self.turtlebot.targets or {}).items()},
             },
             "dobot": vars(self.dobot),

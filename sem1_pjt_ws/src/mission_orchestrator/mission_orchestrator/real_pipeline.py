@@ -45,7 +45,26 @@ class RealHardwarePipeline:
             "turtlebot": self.config.summary()["turtlebot"],
             "dobot": dobot.as_dashboard_payload(),
             "vision": self.config.summary()["vision"],
+            "phases": self.demo_phases(),
         }
+
+    @staticmethod
+    def demo_phases() -> list[dict[str, str]]:
+        """Presentation-grade checkpoints adapted from the reference project.
+
+        The reference project is a medicine-delivery demo, so only its robust
+        integration pattern is reused here: visible phases, explicit gates, and
+        a return-home step after delivery.  The domain remains smart assembly.
+        """
+        return [
+            {"id": "order", "label": "작업 오더 수신", "gate": "operator/stt order"},
+            {"id": "conveyor_to_vision_gate", "label": "컨베이어 이동 및 정위치 감지", "gate": "vision.base_in_position"},
+            {"id": "assembly", "label": "Dobot 2단계 자동 조립", "gate": "dobot stage results"},
+            {"id": "quality_check", "label": "비전 기반 품질 확인", "gate": "vision.qc_passed"},
+            {"id": "load_to_turtlebot", "label": "완성품 TurtleBot 적재", "gate": "dobot.loaded_to_turtlebot"},
+            {"id": "delivery", "label": "목적지 무인 배송", "gate": "turtlebot.delivery_arrived"},
+            {"id": "return_home", "label": "TurtleBot 시작 위치 복귀", "gate": "turtlebot.return_arrived", "source_reference": "project_pill_return_flow_adapted"},
+        ]
 
     @staticmethod
     def _command_result(subsystem: str, action: str, result) -> dict[str, Any]:
@@ -85,4 +104,7 @@ class RealHardwarePipeline:
         transition(EventType.LOADED_TO_TURTLEBOT, {"source": "dobot"})
         outputs.append(self._command_result("turtlebot", f"navigate_{destination}", self.turtlebot.navigate(destination)))
         transition(EventType.DELIVERY_ARRIVED, {"destination": destination, "source": "turtlebot"})
+        transition(EventType.RETURN_REQUESTED, {"destination": self.config.turtlebot.home_destination, "source": "mission_orchestrator"}, "return home requested")
+        outputs.append(self._command_result("turtlebot", f"return_{self.config.turtlebot.home_destination}", self.turtlebot.return_home()))
+        transition(EventType.RETURN_ARRIVED, {"destination": self.config.turtlebot.home_destination, "source": "turtlebot"}, "returned home")
         return outputs

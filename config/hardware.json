@@ -21,7 +21,9 @@
     "workspace_setup": "~/turtlebot4_ws/install/setup.bash",
     "nav_action": "/navigate_to_pose",
     "map_frame": "map",
+    "home_destination": "HOME",
     "targets": {
+      "HOME": {"x": 0.0, "y": 0.0, "yaw": 0.0},
       "A": {"x": 1.2, "y": 0.0, "yaw": 0.0},
       "B": {"x": 0.0, "y": 1.2, "yaw": 1.5708}
     },
