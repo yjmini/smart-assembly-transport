@@ -30,6 +30,14 @@ Stepper mode:
 - CONVEYOR_ENABLE_ACTIVE_HIGH: 1 if ENA is active-high, 0 if active-low, default 0
 - CONVEYOR_DIR_ACTIVE_HIGH: output level for forward direction, default 0
 - CONVEYOR_GPIO_BACKEND: auto, gpiod, or gpiozero, default auto
+
+Sorter servo mode:
+- SORTER_SERVO_PIN: BCM PWM/control pin for the diverter servo, default 18
+- SORTER_LEFT_PULSE_SEC: pulse width for normal/left sort, default 0.0010
+- SORTER_RIGHT_PULSE_SEC: pulse width for abnormal/right sort, default 0.0020
+- SORTER_NEUTRAL_PULSE_SEC: pulse width for neutral, default 0.0015
+- SORTER_SERVO_HOLD_SEC: how long to hold each servo command, default 0.7
+- SORTER_SERVO_PERIOD_SEC: software PWM period, default 0.02
 """
 from __future__ import annotations
 
@@ -57,6 +65,13 @@ DIRECTION = os.environ.get("CONVEYOR_DIRECTION", "forward").strip().lower()
 ENABLE_ACTIVE_HIGH = os.environ.get("CONVEYOR_ENABLE_ACTIVE_HIGH", "0") != "0"
 DIR_ACTIVE_HIGH = os.environ.get("CONVEYOR_DIR_ACTIVE_HIGH", "0") != "0"
 GPIO_BACKEND = os.environ.get("CONVEYOR_GPIO_BACKEND", "auto").strip().lower()
+
+SORTER_SERVO_PIN = int(os.environ.get("SORTER_SERVO_PIN", "18"))
+SORTER_LEFT_PULSE_SEC = max(0.0005, float(os.environ.get("SORTER_LEFT_PULSE_SEC", "0.0010")))
+SORTER_RIGHT_PULSE_SEC = max(0.0005, float(os.environ.get("SORTER_RIGHT_PULSE_SEC", "0.0020")))
+SORTER_NEUTRAL_PULSE_SEC = max(0.0005, float(os.environ.get("SORTER_NEUTRAL_PULSE_SEC", "0.0015")))
+SORTER_SERVO_HOLD_SEC = max(0.0, float(os.environ.get("SORTER_SERVO_HOLD_SEC", "0.7")))
+SORTER_SERVO_PERIOD_SEC = max(0.003, float(os.environ.get("SORTER_SERVO_PERIOD_SEC", "0.02")))
 
 
 class GpiodOutputDevice:
@@ -235,6 +250,47 @@ def _pulse_stepper(step_device, count: int, delay_sec: float) -> tuple[int, bool
     return completed, False
 
 
+def _servo_device():
+    return _output_device(SORTER_SERVO_PIN, active_high=True, initial_value=False)
+
+
+def _drive_servo_pulse(servo_device, pulse_width_sec: float, hold_sec: float) -> None:
+    if hold_sec <= 0:
+        return
+    low_time = max(0.0, SORTER_SERVO_PERIOD_SEC - pulse_width_sec)
+    cycles = max(1, int(hold_sec / SORTER_SERVO_PERIOD_SEC))
+    for _ in range(cycles):
+        servo_device.on()
+        time.sleep(pulse_width_sec)
+        servo_device.off()
+        time.sleep(low_time)
+
+
+def _set_sorter(direction: str) -> bool:
+    servo = _servo_device()
+    if not servo:
+        return False
+    try:
+        pulse = SORTER_LEFT_PULSE_SEC if direction == "left" else SORTER_RIGHT_PULSE_SEC
+        _drive_servo_pulse(servo, pulse, SORTER_SERVO_HOLD_SEC)
+        return True
+    finally:
+        servo.off()
+        close_devices(servo)
+
+
+def _center_sorter() -> bool:
+    servo = _servo_device()
+    if not servo:
+        return False
+    try:
+        _drive_servo_pulse(servo, SORTER_NEUTRAL_PULSE_SEC, SORTER_SERVO_HOLD_SEC)
+        return True
+    finally:
+        servo.off()
+        close_devices(servo)
+
+
 def run_digital_action(action: str) -> dict[str, Any]:
     motor = _digital_motor()
     gpio_available = motor is not None
@@ -266,6 +322,7 @@ def run_stepper_action(action: str) -> dict[str, Any]:
         "steps": STEPS,
         "step_delay_sec": STEP_DELAY_SEC,
         "direction": DIRECTION,
+        "sorter_servo_pin": SORTER_SERVO_PIN,
     }
 
     if action == "status":
@@ -281,13 +338,20 @@ def run_stepper_action(action: str) -> dict[str, Any]:
 
     step, direction, enable = devices
     try:
-        if action == "start":
+        if action in {"start", "sort-left", "sort-right"}:
             clear_stop_request()
+            sort_direction = None
+            sorter_gpio_available = False
+            if action in {"sort-left", "sort-right"}:
+                sort_direction = "left" if action == "sort-left" else "right"
+                sorter_gpio_available = _set_sorter(sort_direction)
             _set_forward_direction(direction)
             enable.on()
             completed_steps, stopped_by_request = _pulse_stepper(step, STEPS, STEP_DELAY_SEC)
             enable.off()
             step.off()
+            if sort_direction:
+                _center_sorter()
             if stopped_by_request:
                 request = stop_request_payload()
                 return write_state(
@@ -297,6 +361,18 @@ def run_stepper_action(action: str) -> dict[str, Any]:
                     completed_steps=completed_steps,
                     stop_reason=request.get("reason", "stop"),
                     stop_file=str(STOP_FILE),
+                    sort_direction=sort_direction,
+                    sorter_gpio_available=sorter_gpio_available,
+                )
+            if sort_direction:
+                return write_state(
+                    "SORTED_LEFT" if sort_direction == "left" else "SORTED_RIGHT",
+                    True,
+                    **common,
+                    completed_steps=completed_steps,
+                    stop_file=str(STOP_FILE),
+                    sort_direction=sort_direction,
+                    sorter_gpio_available=sorter_gpio_available,
                 )
             return write_state("MOVED", True, **common, completed_steps=completed_steps, stop_file=str(STOP_FILE))
         if action == "stop":
@@ -322,7 +398,7 @@ def run_action(action: str) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["start", "stop", "emergency-stop", "status"])
+    parser.add_argument("action", choices=["start", "sort-left", "sort-right", "stop", "emergency-stop", "status"])
     args = parser.parse_args()
     print(json.dumps(run_action(args.action), ensure_ascii=False))
 

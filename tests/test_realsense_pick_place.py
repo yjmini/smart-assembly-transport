@@ -7,7 +7,9 @@ from sem1_pjt_ws.src.dobot_controller.dobot_controller.realsense_pick_place impo
     CameraPoint,
     ObjectPickPlaceCoordinator,
     PickPlaceConfig,
+    build_conveyor_command,
     build_two_object_pick_place_plan,
+    sort_action_for_quality,
 )
 
 
@@ -37,7 +39,7 @@ def test_two_object_pick_place_plan_places_each_object_then_moves_conveyor():
         "object_2_descend_to_conveyor",
         "object_2_release_on_conveyor",
         "object_2_retreat_from_conveyor",
-        "start_conveyor_after_two_objects",
+        "sort_conveyor_left_after_quality_pass",
     ]
     assert [step.kind for step in plan.steps].count("dobot_pose") == 12
     assert [step.kind for step in plan.steps].count("suction") == 4
@@ -46,7 +48,7 @@ def test_two_object_pick_place_plan_places_each_object_then_moves_conveyor():
     assert plan.steps[7].pose is not None
     assert plan.steps[7].pose.z == config.conveyor_retreat_z_mm
     assert plan.steps[-1].kind == "conveyor"
-    assert plan.steps[-1].conveyor_action == "start"
+    assert plan.steps[-1].conveyor_action == "sort-left"
 
 
 def test_project_pill_reference_transform_maps_camera_point_to_robot_xy():
@@ -124,4 +126,24 @@ def test_second_object_starts_conveyor_after_color_switch():
     assert coordinator.completed_count == 2
     assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2", "COMPLETED_TWO_OBJECT_PICK_PLACE"]
     assert target_colors == ["yellow", "red"]
-    assert executed_batches[-1] == ["start_conveyor_after_two_objects"]
+    assert executed_batches[-1] == ["sort_conveyor_left_after_quality_pass"]
+
+
+def test_quality_result_maps_normal_left_and_abnormal_right():
+    assert sort_action_for_quality("normal") == ("sort-left", "sort_conveyor_left_after_quality_pass")
+    assert sort_action_for_quality("pass") == ("sort-left", "sort_conveyor_left_after_quality_pass")
+    assert sort_action_for_quality("abnormal") == ("sort-right", "sort_conveyor_right_after_quality_fail")
+    assert sort_action_for_quality("fail") == ("sort-right", "sort_conveyor_right_after_quality_fail")
+
+
+def test_conveyor_command_uses_sort_action_and_longer_step_count():
+    command = build_conveyor_command(
+        action="sort-right",
+        steps=3200,
+        step_delay_sec=0.0001,
+        host="192.168.110.142",
+        user="ssafy",
+    )
+
+    assert "CONVEYOR_STEPS=3200" in command
+    assert "conveyor_control.py sort-right" in command

@@ -169,6 +169,13 @@ yellow, red, blue, green
 
 ## 6. Dobot 2개 물체 pick/place 노드 실행
 
+분류 기능을 쓰려면 Conveyor Pi의 edge script도 최신이어야 합니다.
+
+```bash
+scp /home/ssafy/smart-assembly-transport/scripts/edge/conveyor_control.py \
+  ssafy@192.168.110.142:~/smart-assembly-transport-edge/conveyor_control.py
+```
+
 새 터미널:
 
 ```bash
@@ -176,8 +183,19 @@ cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 run dobot_controller two_object_pick_place --ros-args \
-  -p target_colors:=yellow,red
+  -p target_colors:=yellow,red \
+  -p quality_result:=normal \
+  -p conveyor_sort_steps:=3200
 ```
+
+분류 방향:
+
+```text
+quality_result:=normal   → 왼쪽 분류(sort-left)
+quality_result:=abnormal → 오른쪽 분류(sort-right)
+```
+
+`conveyor_sort_steps`는 두 물체를 올린 뒤 분류 지점까지 충분히 이동시키기 위한 컨베이어 pulse 수입니다. 기존 짧은 테스트값보다 길게 기본 `3200`으로 잡았습니다. 너무 짧으면 `4000`, `5000`처럼 올리고, 너무 길면 낮춥니다.
 
 동작 순서:
 
@@ -195,7 +213,8 @@ ros2 run dobot_controller two_object_pick_place --ros-args \
 11. `/target_color=red`로 두 번째 색상 전환 후 잠시 대기
 12. 두 번째 /target_pixel 좌표 수신
 13. 같은 순서로 두 번째 물체를 컨베이어에 놓음
-14. Conveyor Pi에 start 명령 전송
+14. 품질 결과가 `normal`이면 컨베이어를 길게 구동하면서 왼쪽으로 분류
+15. 품질 결과가 `abnormal`이면 컨베이어를 길게 구동하면서 오른쪽으로 분류
 ```
 
 ## 7. 현재 기준 좌표/보정값
