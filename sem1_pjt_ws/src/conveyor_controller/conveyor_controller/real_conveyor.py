@@ -30,7 +30,9 @@ class ConveyorCommandBuilder:
             "status": self.config.status_args,
         }[action]
         script = self.config.remote_script if self.config.remote_script.startswith("~/") else quote(self.config.remote_script)
-        remote = " ".join([quote(self.config.remote_python), script, *map(quote, action_args)])
+        env = " ".join(f"{quote(str(key))}={quote(str(value))}" for key, value in sorted((self.config.remote_env or {}).items()))
+        command = " ".join([quote(self.config.remote_python), script, *map(quote, action_args)])
+        remote = f"{env} {command}" if env else command
         return [
             "ssh",
             "-o",

@@ -26,7 +26,26 @@ scp scripts/edge/conveyor_control.py ssafy@192.168.110.142:~/smart-assembly-tran
 ssh ssafy@192.168.110.142 'chmod +x ~/smart-assembly-transport-edge/conveyor_control.py'
 ```
 
-`conveyor_control.py` 안의 GPIO/PWM TODO는 실제 모터 드라이버 배선에 맞게 수정해야 합니다.
+`conveyor_control.py`는 두 가지 모드를 지원합니다.
+
+- `CONVEYOR_MODE=digital`: 단일 GPIO ON/OFF 방식입니다. 릴레이/DC 모터 enable에는 맞지만, STEP/DIR 방식 스텝모터에는 맞지 않습니다.
+- `CONVEYOR_MODE=stepper`: project_pill의 컨베이어가 `/conveyor/*/speed` 명령으로 일정 방향 속도를 주는 패턴을 실제 GPIO에 맞게 변환한 방식입니다. `start` 명령에서 STEP 핀에 정해진 수만큼 pulse를 주고, `stop`/`emergency-stop`은 enable을 끕니다.
+
+현재 기본 설정은 `config/hardware.json`의 `conveyor.remote_env`에 있습니다.
+
+```json
+"CONVEYOR_MODE": "stepper",
+"CONVEYOR_STEP_PIN": "27",
+"CONVEYOR_DIR_PIN": "17",
+"CONVEYOR_ENABLE_PIN": "22",
+"CONVEYOR_STEPS": "800",
+"CONVEYOR_STEP_DELAY_SEC": "0.0001",
+"CONVEYOR_ENABLE_ACTIVE_HIGH": "0",
+"CONVEYOR_DIR_ACTIVE_HIGH": "0",
+"CONVEYOR_GPIO_BACKEND": "gpiod"
+```
+
+실제 배선이 다르면 `CONVEYOR_STEP_PIN`, `CONVEYOR_DIR_PIN`, `CONVEYOR_ENABLE_PIN`을 먼저 수정해야 합니다. GPIO 번호는 Raspberry Pi **BCM 번호** 기준입니다.
 
 ## 3. Backend/UI 실행
 

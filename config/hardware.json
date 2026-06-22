@@ -10,6 +10,18 @@
     "stop_args": ["stop"],
     "emergency_stop_args": ["emergency-stop"],
     "status_args": ["status"],
+    "remote_env": {
+      "CONVEYOR_MODE": "stepper",
+      "CONVEYOR_STEP_PIN": "27",
+      "CONVEYOR_DIR_PIN": "17",
+      "CONVEYOR_ENABLE_PIN": "22",
+      "CONVEYOR_STEPS": "800",
+      "CONVEYOR_STEP_DELAY_SEC": "0.0001",
+      "CONVEYOR_DIRECTION": "forward",
+      "CONVEYOR_ENABLE_ACTIVE_HIGH": "0",
+      "CONVEYOR_DIR_ACTIVE_HIGH": "0",
+      "CONVEYOR_GPIO_BACKEND": "gpiod"
+    },
     "connect_timeout_sec": 5
   },
   "turtlebot": {

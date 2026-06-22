@@ -20,6 +20,7 @@ class ConveyorConfig:
     stop_args: tuple[str, ...] = ("stop",)
     emergency_stop_args: tuple[str, ...] = ("emergency-stop",)
     status_args: tuple[str, ...] = ("status",)
+    remote_env: dict[str, str] | None = None
     connect_timeout_sec: int = 5
 
     @property
@@ -110,7 +111,12 @@ class HardwareConfig:
     def summary(self) -> dict[str, Any]:
         return {
             "mode": self.mode,
-            "conveyor": {"target": self.conveyor.target, "host": self.conveyor.host, "ssh_port": self.conveyor.ssh_port},
+            "conveyor": {
+                "target": self.conveyor.target,
+                "host": self.conveyor.host,
+                "ssh_port": self.conveyor.ssh_port,
+                "remote_env": self.conveyor.remote_env or {},
+            },
             "turtlebot": {
                 "target": self.turtlebot.target,
                 "host": self.turtlebot.host,
