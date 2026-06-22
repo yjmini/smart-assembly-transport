@@ -151,3 +151,33 @@ def test_status_reads_previous_stepper_state(monkeypatch, tmp_path):
     assert status == json.loads(Path(moved["state_file"]).read_text(encoding="utf-8"))
     assert status["state"] == "MOVED"
     assert status["mode"] == "stepper"
+
+
+def test_stepper_sort_left_positions_servo_then_moves_longer(monkeypatch, tmp_path):
+    module, sleeper = load_edge_module(
+        monkeypatch,
+        tmp_path,
+        {
+            "CONVEYOR_MODE": "stepper",
+            "CONVEYOR_STEP_PIN": 20,
+            "CONVEYOR_DIR_PIN": 21,
+            "CONVEYOR_ENABLE_PIN": 16,
+            "CONVEYOR_STEPS": 4,
+            "CONVEYOR_STEP_DELAY_SEC": "0.0005",
+            "SORTER_SERVO_PIN": 18,
+            "SORTER_SERVO_HOLD_SEC": "0.04",
+        },
+    )
+
+    result = module.run_action("sort-left")
+
+    assert result["state"] == "SORTED_LEFT"
+    assert result["sort_direction"] == "left"
+    assert result["completed_steps"] == 4
+    assert result["sorter_servo_pin"] == 18
+    assert FakeOutputDevice.events.count(("init", 18, True, False)) == 2
+    assert ("on", 18) in FakeOutputDevice.events
+    assert ("off", 18) in FakeOutputDevice.events
+    assert FakeOutputDevice.events.count(("on", 20)) == 4
+    assert 0.001 in sleeper.calls
+    assert 0.0015 in sleeper.calls

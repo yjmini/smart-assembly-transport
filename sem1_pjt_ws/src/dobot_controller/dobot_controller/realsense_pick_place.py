@@ -15,7 +15,8 @@ loaded only at runtime.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from shlex import quote
 from typing import Iterable, Any, Callable
 import json
 import subprocess
@@ -78,6 +79,9 @@ class PickPlaceConfig:
     conveyor_retreat_z_mm: float
     object_place_spacing_y_mm: float
     color_switch_settle_sec: float = 1.0
+    quality_result: str = "normal"
+    conveyor_sort_steps: int = 3200
+    conveyor_step_delay_sec: float = 0.0001
     motion_r: float = 0.0
 
     @classmethod
@@ -148,6 +152,40 @@ def _steps_for_object(index: int, point: CameraPoint, config: PickPlaceConfig) -
     ]
 
 
+def sort_action_for_quality(quality_result: str) -> tuple[str, str]:
+    normalized = quality_result.strip().lower().replace("_", "-")
+    if normalized in {"normal", "ok", "pass", "passed", "good", "left"}:
+        return "sort-left", "sort_conveyor_left_after_quality_pass"
+    if normalized in {"abnormal", "ng", "fail", "failed", "defect", "defective", "bad", "right"}:
+        return "sort-right", "sort_conveyor_right_after_quality_fail"
+    raise ValueError(f"Unsupported quality_result={quality_result!r}; expected normal/pass or abnormal/fail")
+
+
+def build_conveyor_command(
+    *,
+    action: str,
+    steps: int,
+    step_delay_sec: float,
+    host: str = "192.168.110.142",
+    user: str = "ssafy",
+) -> str:
+    remote_env = {
+        "CONVEYOR_MODE": "stepper",
+        "CONVEYOR_GPIO_BACKEND": "gpiod",
+        "CONVEYOR_STEP_PIN": "27",
+        "CONVEYOR_DIR_PIN": "17",
+        "CONVEYOR_ENABLE_PIN": "22",
+        "CONVEYOR_ENABLE_ACTIVE_HIGH": "0",
+        "CONVEYOR_DIR_ACTIVE_HIGH": "0",
+        "CONVEYOR_STEPS": str(int(steps)),
+        "CONVEYOR_STEP_DELAY_SEC": str(float(step_delay_sec)),
+        "SORTER_SERVO_PIN": "18",
+    }
+    env = " ".join(f"{key}={quote(value)}" for key, value in remote_env.items())
+    remote = f"{env} python3 ~/smart-assembly-transport-edge/conveyor_control.py {quote(action)}"
+    return f"ssh {quote(user)}@{quote(host)} {quote(remote)}"
+
+
 def build_two_object_pick_place_plan(points: Iterable[CameraPoint], config: PickPlaceConfig | None = None) -> PickPlacePlan:
     config = config or PickPlaceConfig.reference_from_project_pill()
     points = list(points)
@@ -156,7 +194,8 @@ def build_two_object_pick_place_plan(points: Iterable[CameraPoint], config: Pick
     steps: list[PickPlaceStep] = []
     for index, point in enumerate(points, start=1):
         steps.extend(_steps_for_object(index, point, config))
-    steps.append(PickPlaceStep("start_conveyor_after_two_objects", "conveyor", conveyor_action="start"))
+    conveyor_action, step_name = sort_action_for_quality(config.quality_result)
+    steps.append(PickPlaceStep(step_name, "conveyor", conveyor_action=conveyor_action))
     return PickPlacePlan(steps)
 
 
@@ -224,7 +263,8 @@ class ObjectPickPlaceCoordinator:
                 self.completed_points.append(point)
                 completed = len(self.completed_points)
             if completed == 2:
-                self.execute_steps([PickPlaceStep("start_conveyor_after_two_objects", "conveyor", conveyor_action="start")])
+                conveyor_action, step_name = sort_action_for_quality(self.config.quality_result)
+                self.execute_steps([PickPlaceStep(step_name, "conveyor", conveyor_action=conveyor_action)])
                 self.publish_status("COMPLETED_TWO_OBJECT_PICK_PLACE")
             else:
                 next_color = self.target_colors[min(completed, len(self.target_colors) - 1)]
@@ -255,17 +295,20 @@ class TwoObjectPickPlaceNode:
         self.node = _Node("two_object_pick_place_node")
         self.PointToPoint = PointToPoint
         self.SuctionCupControl = SuctionCupControl
-        self.config = PickPlaceConfig.reference_from_project_pill()
+        quality_result = str(self.node.declare_parameter("quality_result", "normal").value)
+        conveyor_sort_steps = int(self.node.declare_parameter("conveyor_sort_steps", 3200).value)
+        conveyor_step_delay_sec = float(self.node.declare_parameter("conveyor_step_delay_sec", 0.0001).value)
+        self.config = replace(
+            PickPlaceConfig.reference_from_project_pill(),
+            quality_result=quality_result,
+            conveyor_sort_steps=conveyor_sort_steps,
+            conveyor_step_delay_sec=conveyor_step_delay_sec,
+        )
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
         target_colors_param = str(self.node.declare_parameter("target_colors", "yellow,red").value)
         self.target_colors = tuple(color.strip().lower() for color in target_colors_param.split(",") if color.strip()) or ("yellow", "red")
         self.ptp_action = str(self.node.declare_parameter("ptp_action", "PTP_action").value)
-        self.conveyor_command = str(
-            self.node.declare_parameter(
-                "conveyor_command",
-                "ssh ssafy@192.168.110.142 'CONVEYOR_MODE=stepper CONVEYOR_GPIO_BACKEND=gpiod CONVEYOR_STEP_PIN=27 CONVEYOR_DIR_PIN=17 CONVEYOR_ENABLE_PIN=22 CONVEYOR_ENABLE_ACTIVE_HIGH=0 CONVEYOR_DIR_ACTIVE_HIGH=0 CONVEYOR_STEPS=800 CONVEYOR_STEP_DELAY_SEC=0.0001 python3 ~/smart-assembly-transport-edge/conveyor_control.py start'",
-            ).value
-        )
+        self.conveyor_command_template = str(self.node.declare_parameter("conveyor_command", "").value)
         self.subscription = self.node.create_subscription(Point, "/target_pixel", self.target_callback, 10)
         self.status_pub = self.node.create_publisher(String, "/task_status", 10)
         self.plan_pub = self.node.create_publisher(String, "/dobot/two_object_plan", 10)
@@ -314,7 +357,13 @@ class TwoObjectPickPlaceNode:
                 if step.dwell_sec:
                     time.sleep(step.dwell_sec)
             elif step.kind == "conveyor":
-                subprocess.run(self.conveyor_command, shell=True, check=False, text=True, capture_output=True, timeout=30)
+                action = step.conveyor_action or "sort-left"
+                command = self.conveyor_command_template.format(action=action) if self.conveyor_command_template else build_conveyor_command(
+                    action=action,
+                    steps=self.config.conveyor_sort_steps,
+                    step_delay_sec=self.config.conveyor_step_delay_sec,
+                )
+                subprocess.run(command, shell=True, check=False, text=True, capture_output=True, timeout=60)
 
     def publish_status(self, status: str) -> None:
         from std_msgs.msg import String
