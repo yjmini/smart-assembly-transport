@@ -106,22 +106,27 @@ yellow, red, blue, green
 cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 run dobot_controller two_object_pick_place
+ros2 run dobot_controller two_object_pick_place --ros-args \
+  -p target_colors:=yellow,red
 ```
 
 동작 순서:
 
 ```text
-1. /target_pixel 첫 번째 좌표 수신
-2. Dobot이 첫 번째 물체 위로 이동
-3. pick_z로 내려감
-4. suction ON
-5. safe_z로 상승
-6. 컨베이어 place 위치 위로 이동
-7. suction OFF로 컨베이어에 놓음
-8. 두 번째 /target_pixel 좌표 수신 대기
-9. 같은 순서로 두 번째 물체를 컨베이어에 놓음
-10. Conveyor Pi에 start 명령 전송
+1. `/target_color=yellow`로 첫 번째 색상 감지
+2. /target_pixel 첫 번째 좌표 수신
+3. Dobot이 첫 번째 물체 위로 이동
+4. pick_z로 내려감
+5. suction ON
+6. safe_z로 상승
+7. 컨베이어 place 위치 위로 이동
+8. 컨베이어 z 위치까지 내려감
+9. suction OFF로 컨베이어에 안정적으로 놓음
+10. safe_z로 다시 상승
+11. `/target_color=red`로 두 번째 색상 전환 후 잠시 대기
+12. 두 번째 /target_pixel 좌표 수신
+13. 같은 순서로 두 번째 물체를 컨베이어에 놓음
+14. Conveyor Pi에 start 명령 전송
 ```
 
 ## 6. 현재 기준 좌표/보정값

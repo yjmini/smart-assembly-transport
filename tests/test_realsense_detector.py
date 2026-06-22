@@ -5,6 +5,7 @@ from sem1_pjt_ws.src.vision_detector.vision_detector.realsense_detector import (
     RealSenseIntrinsics,
     deproject_pixel_to_camera_mm,
     detect_largest_colored_depth_point,
+    detect_largest_colored_depth_point_by_color,
 )
 
 
@@ -38,3 +39,26 @@ def test_detect_largest_colored_depth_point_returns_3d_center():
     assert detection.pixel == pytest.approx((50, 40), abs=2)
     assert detection.camera_point_mm == pytest.approx((-10.0, -10.0, 400.0), abs=3.0)
     assert detection.area > 1000
+
+
+def test_red_target_color_uses_red_hue_wraparound_mask():
+    import cv2
+    import numpy as np
+
+    bgr = np.zeros((100, 120, 3), dtype=np.uint8)
+    cv2.rectangle(bgr, (30, 20), (70, 60), (0, 0, 255), -1)
+    depth = np.zeros((100, 120), dtype=np.uint16)
+    depth[38:43, 48:53] = 450
+    intrinsics = RealSenseIntrinsics(fx=450.0, fy=450.0, cx=60.0, cy=50.0)
+
+    detection = detect_largest_colored_depth_point_by_color(
+        bgr,
+        depth,
+        intrinsics,
+        "red",
+        min_area=500,
+    )
+
+    assert detection is not None
+    assert detection.pixel == pytest.approx((50, 40), abs=2)
+    assert detection.camera_point_mm == pytest.approx((-10.0, -10.0, 450.0), abs=3.0)

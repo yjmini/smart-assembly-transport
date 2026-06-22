@@ -77,6 +77,7 @@ class PickPlaceConfig:
     conveyor_pose_mm: Pose4D
     conveyor_retreat_z_mm: float
     object_place_spacing_y_mm: float
+    color_switch_settle_sec: float = 1.0
     motion_r: float = 0.0
 
     @classmethod
@@ -140,7 +141,8 @@ def _steps_for_object(index: int, point: CameraPoint, config: PickPlaceConfig) -
         PickPlaceStep(f"{prefix}_descend_to_pick", "dobot_pose", pick_pose),
         PickPlaceStep(f"{prefix}_suction_on", "suction", suction_enabled=True, dwell_sec=0.5),
         PickPlaceStep(f"{prefix}_lift_after_pick", "dobot_pose", pick_above),
-        PickPlaceStep(f"{prefix}_move_to_conveyor", "dobot_pose", place_above),
+        PickPlaceStep(f"{prefix}_move_above_conveyor", "dobot_pose", place_above),
+        PickPlaceStep(f"{prefix}_descend_to_conveyor", "dobot_pose", place_pose),
         PickPlaceStep(f"{prefix}_release_on_conveyor", "suction", suction_enabled=False, dwell_sec=0.5),
         PickPlaceStep(f"{prefix}_retreat_from_conveyor", "dobot_pose", place_above),
     ]
@@ -172,14 +174,21 @@ class ObjectPickPlaceCoordinator:
         config: PickPlaceConfig,
         execute_steps: Callable[[list[PickPlaceStep]], None],
         publish_status: Callable[[str], None],
+        *,
+        set_target_color: Callable[[str], None] | None = None,
+        target_colors: tuple[str, ...] = ("yellow", "red"),
     ) -> None:
         self.config = config
         self.execute_steps = execute_steps
         self.publish_status = publish_status
+        self.set_target_color = set_target_color or (lambda _color: None)
+        self.target_colors = tuple(color.strip().lower() for color in target_colors if color.strip()) or ("yellow", "red")
         self.completed_points: list[CameraPoint] = []
         self.executing = False
+        self._ignore_targets_until = 0.0
         self._lock = threading.Lock()
         self._worker: threading.Thread | None = None
+        self.set_target_color(self.target_colors[0])
 
     @property
     def completed_count(self) -> int:
@@ -189,6 +198,8 @@ class ObjectPickPlaceCoordinator:
     def accept_target(self, point: CameraPoint) -> bool:
         with self._lock:
             if self.executing or len(self.completed_points) >= 2:
+                return False
+            if time.monotonic() < self._ignore_targets_until:
                 return False
             self.executing = True
             object_index = len(self.completed_points) + 1
@@ -216,6 +227,10 @@ class ObjectPickPlaceCoordinator:
                 self.execute_steps([PickPlaceStep("start_conveyor_after_two_objects", "conveyor", conveyor_action="start")])
                 self.publish_status("COMPLETED_TWO_OBJECT_PICK_PLACE")
             else:
+                next_color = self.target_colors[min(completed, len(self.target_colors) - 1)]
+                self.set_target_color(next_color)
+                with self._lock:
+                    self._ignore_targets_until = time.monotonic() + self.config.color_switch_settle_sec
                 self.publish_status("COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2")
         finally:
             with self._lock:
@@ -242,6 +257,8 @@ class TwoObjectPickPlaceNode:
         self.SuctionCupControl = SuctionCupControl
         self.config = PickPlaceConfig.reference_from_project_pill()
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
+        target_colors_param = str(self.node.declare_parameter("target_colors", "yellow,red").value)
+        self.target_colors = tuple(color.strip().lower() for color in target_colors_param.split(",") if color.strip()) or ("yellow", "red")
         self.ptp_action = str(self.node.declare_parameter("ptp_action", "PTP_action").value)
         self.conveyor_command = str(
             self.node.declare_parameter(
@@ -252,9 +269,16 @@ class TwoObjectPickPlaceNode:
         self.subscription = self.node.create_subscription(Point, "/target_pixel", self.target_callback, 10)
         self.status_pub = self.node.create_publisher(String, "/task_status", 10)
         self.plan_pub = self.node.create_publisher(String, "/dobot/two_object_plan", 10)
+        self.target_color_pub = self.node.create_publisher(String, "/target_color", 10)
         self.action_client = ActionClient(self.node, PointToPoint, self.ptp_action)
         self.vacuum_client = self.node.create_client(SuctionCupControl, "/dobot_suction_cup_service")
-        self.coordinator = ObjectPickPlaceCoordinator(self.config, self.execute_steps, self.publish_status)
+        self.coordinator = ObjectPickPlaceCoordinator(
+            self.config,
+            self.execute_steps,
+            self.publish_status,
+            set_target_color=self.publish_target_color,
+            target_colors=self.target_colors,
+        )
         self.node.get_logger().info("Two-object RealSense→Dobot→Conveyor node ready; waiting for 2 target points")
 
     def target_callback(self, msg: Any) -> None:
@@ -298,6 +322,14 @@ class TwoObjectPickPlaceNode:
         done = String()
         done.data = status
         self.status_pub.publish(done)
+
+    def publish_target_color(self, color: str) -> None:
+        from std_msgs.msg import String
+
+        msg = String()
+        msg.data = color
+        self.target_color_pub.publish(msg)
+        self.node.get_logger().info(f"Target color set to {color}")
 
     def send_pose_and_wait(self, target_pose: list[float]) -> None:
         goal_msg = self.PointToPoint.Goal()

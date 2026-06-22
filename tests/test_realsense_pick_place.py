@@ -1,4 +1,5 @@
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -24,20 +25,26 @@ def test_two_object_pick_place_plan_places_each_object_then_moves_conveyor():
         "object_1_descend_to_pick",
         "object_1_suction_on",
         "object_1_lift_after_pick",
-        "object_1_move_to_conveyor",
+        "object_1_move_above_conveyor",
+        "object_1_descend_to_conveyor",
         "object_1_release_on_conveyor",
         "object_1_retreat_from_conveyor",
         "object_2_move_above_pick",
         "object_2_descend_to_pick",
         "object_2_suction_on",
         "object_2_lift_after_pick",
-        "object_2_move_to_conveyor",
+        "object_2_move_above_conveyor",
+        "object_2_descend_to_conveyor",
         "object_2_release_on_conveyor",
         "object_2_retreat_from_conveyor",
         "start_conveyor_after_two_objects",
     ]
-    assert [step.kind for step in plan.steps].count("dobot_pose") == 10
+    assert [step.kind for step in plan.steps].count("dobot_pose") == 12
     assert [step.kind for step in plan.steps].count("suction") == 4
+    assert plan.steps[5].pose == config.conveyor_pose_for_index(1)
+    assert plan.steps[6].suction_enabled is False
+    assert plan.steps[7].pose is not None
+    assert plan.steps[7].pose.z == config.conveyor_retreat_z_mm
     assert plan.steps[-1].kind == "conveyor"
     assert plan.steps[-1].conveyor_action == "start"
 
@@ -61,13 +68,20 @@ def test_pick_place_plan_requires_exactly_two_objects():
 def test_target_callback_work_is_dispatched_off_executor_thread():
     config = PickPlaceConfig.reference_from_project_pill()
     statuses: list[str] = []
+    target_colors: list[str] = []
     executed_batches: list[list[str]] = []
 
     def execute_steps(steps):
         executed_batches.append([step.name for step in steps])
         time.sleep(0.05)
 
-    coordinator = ObjectPickPlaceCoordinator(config, execute_steps, statuses.append)
+    coordinator = ObjectPickPlaceCoordinator(
+        config,
+        execute_steps,
+        statuses.append,
+        set_target_color=target_colors.append,
+        target_colors=("yellow", "red"),
+    )
 
     started = time.monotonic()
     accepted = coordinator.accept_target(CameraPoint(20.0, -109.0, 384.0))
@@ -81,4 +95,33 @@ def test_target_callback_work_is_dispatched_off_executor_thread():
 
     assert coordinator.completed_count == 1
     assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2"]
+    assert target_colors == ["yellow", "red"]
     assert executed_batches[0][0] == "object_1_move_above_pick"
+
+
+def test_second_object_starts_conveyor_after_color_switch():
+    config = replace(PickPlaceConfig.reference_from_project_pill(), color_switch_settle_sec=0.0)
+    statuses: list[str] = []
+    target_colors: list[str] = []
+    executed_batches: list[list[str]] = []
+
+    def execute_steps(steps):
+        executed_batches.append([step.name for step in steps])
+
+    coordinator = ObjectPickPlaceCoordinator(
+        config,
+        execute_steps,
+        statuses.append,
+        set_target_color=target_colors.append,
+        target_colors=("yellow", "red"),
+    )
+
+    assert coordinator.accept_target(CameraPoint(20.0, -109.0, 384.0)) is True
+    coordinator.wait_for_idle(timeout_sec=1.0)
+    assert coordinator.accept_target(CameraPoint(-30.0, 42.0, 410.0)) is True
+    coordinator.wait_for_idle(timeout_sec=1.0)
+
+    assert coordinator.completed_count == 2
+    assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2", "COMPLETED_TWO_OBJECT_PICK_PLACE"]
+    assert target_colors == ["yellow", "red"]
+    assert executed_batches[-1] == ["start_conveyor_after_two_objects"]

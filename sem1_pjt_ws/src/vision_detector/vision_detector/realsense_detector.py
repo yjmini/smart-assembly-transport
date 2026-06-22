@@ -60,6 +60,13 @@ def mask_for_hsv_range(hsv_image: Any, hsv_range: HsvRange):
     return cv2.inRange(hsv_image, np.array(hsv_range.lower), np.array(hsv_range.upper))
 
 
+def mask_for_target_color(hsv_image: Any, target_color: str):
+    color = target_color.strip().lower()
+    if color == "red":
+        return red_mask(hsv_image)
+    return mask_for_hsv_range(hsv_image, HSV_RANGES.get(color, HSV_RANGES["yellow"]))
+
+
 def median_depth_near_pixel(depth_image: Any, u: int, v: int, *, radius: int = 2) -> float:
     height, width = depth_image.shape
     u_min, u_max = max(0, u - radius), min(width, u + radius + 1)
@@ -86,6 +93,38 @@ def detect_largest_colored_depth_point(
 
     hsv_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2HSV)
     mask = mask_for_hsv_range(hsv_image, hsv_range)
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    candidates = [contour for contour in contours if cv2.contourArea(contour) >= min_area]
+    if not candidates:
+        return None
+    contour = max(candidates, key=cv2.contourArea)
+    rect = cv2.minAreaRect(contour)
+    u, v = int(rect[0][0]), int(rect[0][1])
+    depth_mm = median_depth_near_pixel(depth_image, u, v)
+    if depth_mm <= 0:
+        return None
+    return DepthDetection(
+        pixel=(u, v),
+        camera_point_mm=deproject_pixel_to_camera_mm(u, v, depth_mm, intrinsics),
+        area=float(cv2.contourArea(contour)),
+    )
+
+
+def detect_largest_colored_depth_point_by_color(
+    bgr_image: Any,
+    depth_image: Any,
+    intrinsics: RealSenseIntrinsics,
+    target_color: str,
+    *,
+    min_area: float = 1000.0,
+) -> DepthDetection | None:
+    import cv2
+    import numpy as np
+
+    hsv_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2HSV)
+    mask = mask_for_target_color(hsv_image, target_color)
     kernel = np.ones((5, 5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -155,8 +194,13 @@ class RealSenseObjectDetectorNode:
         except Exception as exc:  # noqa: BLE001
             self.node.get_logger().error(f"Color conversion failed: {exc}")
             return
-        hsv_range = HSV_RANGES.get(self.target_color, HSV_RANGES["yellow"])
-        detection = detect_largest_colored_depth_point(bgr, self.depth_image, self.intrinsics, hsv_range, min_area=self.min_area)
+        detection = detect_largest_colored_depth_point_by_color(
+            bgr,
+            self.depth_image,
+            self.intrinsics,
+            self.target_color,
+            min_area=self.min_area,
+        )
         if not detection:
             return
         point_msg = self.Point()
