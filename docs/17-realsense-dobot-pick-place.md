@@ -59,9 +59,31 @@ ros2 topic list | grep camera
 /camera/camera/color/camera_info
 ```
 
-## 3. Dobot bringup 확인
+## 3. Dobot bringup 및 homing
 
-Dobot action/service가 떠 있어야 합니다.
+Dobot을 실제로 움직이는 `two_object_pick_place` 노드는 Dobot bringup과 homing이 끝난 뒤 실행해야 합니다. 새 터미널에서 다음을 실행합니다.
+
+```bash
+cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch dobot_bringup dobot_magician_control_system.launch.py
+```
+
+bringup 터미널은 계속 켜 둔 상태로, 다른 터미널에서 homing을 실행합니다.
+
+```bash
+cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 service call /dobot_homing_service dobot_msgs/srv/ExecuteHomingProcedure
+```
+
+## 4. Dobot action/service 확인
+
+Dobot action/service가 떠 있는지 확인합니다.
 
 ```bash
 ros2 action list | grep PTP_action
@@ -75,7 +97,54 @@ PTP_action
 /dobot_suction_cup_service
 ```
 
-## 4. RealSense detector 실행
+`PTP_action`이 보이지 않는 상태에서도 **RealSense detector만 실행하는 것은 가능합니다.** detector는 카메라 토픽만 사용해서 `/target_pixel`을 publish하기 때문입니다. 다만 `two_object_pick_place`는 Dobot 이동 action인 `PTP_action`을 기다리므로, `PTP_action`이 없으면 실제 Dobot pick/place 단계에서 멈춥니다.
+
+따라서 권장 순서는 다음과 같습니다.
+
+```text
+- 카메라 좌표 감지만 확인하려는 경우: PTP_action 없이 5번 RealSense detector 실행 가능
+- Dobot까지 실제 구동하려는 경우: dobot bringup + homing 후 PTP_action 확인이 먼저 필요
+```
+
+만약 `ros2 launch dobot_bringup ...` 실행 후에도 `PTP_action`이 계속 보이지 않으면, bringup 터미널 로그에서 serial port 연결 실패, permission denied, Dobot 전원/USB 연결 문제, action server 기동 실패 메시지를 먼저 확인합니다.
+
+### `np.maximum_sctype` / NumPy 2.x 오류가 나는 경우
+
+다음과 같은 로그가 나오면 Dobot 자체보다 Python 의존성 충돌 문제입니다.
+
+```text
+AttributeError: `np.maximum_sctype` was removed in the NumPy 2.0 release
+```
+
+원인은 `tf_transformations -> transforms3d`가 `~/.local/lib/python3.10/site-packages/numpy`의 NumPy 2.x를 잡고 있는데, 현재 설치된 `transforms3d`가 NumPy 2.x에서 제거된 API를 사용하기 때문입니다. 이 경우 `PTP_server`, `trajectory_validator_server`, `state_publisher`가 죽어서 `PTP_action`이 나타나지 않습니다.
+
+가장 단순한 조치. 실제 Dobot bringup에서 `PTP_action` 복구가 확인된 버전은 `numpy==1.23.5`입니다.
+
+```bash
+python3 -m pip install --user --force-reinstall numpy==1.23.5
+```
+
+설치 중 `opencv-python ... requires numpy>=2` 경고가 나올 수 있지만, Dobot ROS2 bringup에는 `tf_transformations/transforms3d` 호환성이 더 우선입니다. 이 경고는 pip resolver 경고이며, 설치가 `Successfully installed numpy-1.23.5`로 끝나고 `PTP_action`이 뜨면 Dobot 쪽은 정상입니다.
+
+설치 후 새 터미널을 열고 다시 확인합니다.
+
+```bash
+python3 - <<'PY'
+import numpy as np
+import transforms3d
+print('numpy', np.__version__, np.__file__)
+print('transforms3d', transforms3d.__file__)
+PY
+```
+
+`numpy`가 `1.x`로 나오면 Dobot bringup을 다시 실행합니다.
+
+```bash
+ros2 launch dobot_bringup dobot_magician_control_system.launch.py
+ros2 action list | grep PTP_action
+```
+
+## 5. RealSense detector 실행
 
 새 터미널:
 
@@ -98,7 +167,7 @@ ros2 topic pub --once /target_color std_msgs/msg/String "{data: yellow}"
 yellow, red, blue, green
 ```
 
-## 5. Dobot 2개 물체 pick/place 노드 실행
+## 6. Dobot 2개 물체 pick/place 노드 실행
 
 새 터미널:
 
@@ -124,7 +193,7 @@ ros2 run dobot_controller two_object_pick_place
 10. Conveyor Pi에 start 명령 전송
 ```
 
-## 6. 현재 기준 좌표/보정값
+## 7. 현재 기준 좌표/보정값
 
 `project_pill`의 동작 코드에서 가져온 초기값입니다.
 
@@ -146,7 +215,7 @@ object_place_spacing_y_mm = 28.0
 
 실제 테이블에서는 `pick_z_mm`, `conveyor_place_pose`, `object_place_spacing_y_mm`는 미세 조정이 필요할 수 있습니다.
 
-## 7. 모니터링
+## 8. 모니터링
 
 계획 JSON 확인:
 
@@ -167,7 +236,7 @@ COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2
 COMPLETED_TWO_OBJECT_PICK_PLACE
 ```
 
-## 8. 안전 주의
+## 9. 안전 주의
 
 - Dobot workspace 안에 손을 넣지 마세요.
 - 첫 테스트는 suction/높이 보정값을 보수적으로 잡고 진행하세요.
