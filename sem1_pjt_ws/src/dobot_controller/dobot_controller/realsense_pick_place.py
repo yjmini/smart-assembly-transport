@@ -16,9 +16,10 @@ loaded only at runtime.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Any
+from typing import Iterable, Any, Callable
 import json
 import subprocess
+import threading
 import time
 
 try:
@@ -157,6 +158,70 @@ def build_two_object_pick_place_plan(points: Iterable[CameraPoint], config: Pick
     return PickPlacePlan(steps)
 
 
+class ObjectPickPlaceCoordinator:
+    """Runs long Dobot/conveyor work outside the ROS subscription callback.
+
+    The ROS executor must remain free to process action-service responses while a
+    pick/place cycle is running.  This coordinator accepts a target point quickly,
+    starts the blocking work on a background thread, and rejects duplicate target
+    messages until the current object is complete.
+    """
+
+    def __init__(
+        self,
+        config: PickPlaceConfig,
+        execute_steps: Callable[[list[PickPlaceStep]], None],
+        publish_status: Callable[[str], None],
+    ) -> None:
+        self.config = config
+        self.execute_steps = execute_steps
+        self.publish_status = publish_status
+        self.completed_points: list[CameraPoint] = []
+        self.executing = False
+        self._lock = threading.Lock()
+        self._worker: threading.Thread | None = None
+
+    @property
+    def completed_count(self) -> int:
+        with self._lock:
+            return len(self.completed_points)
+
+    def accept_target(self, point: CameraPoint) -> bool:
+        with self._lock:
+            if self.executing or len(self.completed_points) >= 2:
+                return False
+            self.executing = True
+            object_index = len(self.completed_points) + 1
+            self._worker = threading.Thread(
+                target=self._run_object,
+                args=(object_index, point),
+                name=f"dobot_pick_place_object_{object_index}",
+                daemon=True,
+            )
+            self._worker.start()
+            return True
+
+    def wait_for_idle(self, timeout_sec: float | None = None) -> None:
+        worker = self._worker
+        if worker is not None:
+            worker.join(timeout=timeout_sec)
+
+    def _run_object(self, object_index: int, point: CameraPoint) -> None:
+        try:
+            self.execute_steps(_steps_for_object(object_index, point, self.config))
+            with self._lock:
+                self.completed_points.append(point)
+                completed = len(self.completed_points)
+            if completed == 2:
+                self.execute_steps([PickPlaceStep("start_conveyor_after_two_objects", "conveyor", conveyor_action="start")])
+                self.publish_status("COMPLETED_TWO_OBJECT_PICK_PLACE")
+            else:
+                self.publish_status("COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2")
+        finally:
+            with self._lock:
+                self.executing = False
+
+
 class TwoObjectPickPlaceNode:
     """ROS 2 node that waits for two RealSense points, picks both, then starts conveyor."""
 
@@ -176,8 +241,6 @@ class TwoObjectPickPlaceNode:
         self.PointToPoint = PointToPoint
         self.SuctionCupControl = SuctionCupControl
         self.config = PickPlaceConfig.reference_from_project_pill()
-        self.completed_points: list[CameraPoint] = []
-        self.executing = False
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
         self.ptp_action = str(self.node.declare_parameter("ptp_action", "PTP_action").value)
         self.conveyor_command = str(
@@ -191,32 +254,22 @@ class TwoObjectPickPlaceNode:
         self.plan_pub = self.node.create_publisher(String, "/dobot/two_object_plan", 10)
         self.action_client = ActionClient(self.node, PointToPoint, self.ptp_action)
         self.vacuum_client = self.node.create_client(SuctionCupControl, "/dobot_suction_cup_service")
+        self.coordinator = ObjectPickPlaceCoordinator(self.config, self.execute_steps, self.publish_status)
         self.node.get_logger().info("Two-object RealSense→Dobot→Conveyor node ready; waiting for 2 target points")
 
     def target_callback(self, msg: Any) -> None:
-        if self.executing:
-            return
-        if len(self.completed_points) >= 2:
-            return
         point = CameraPoint(float(msg.x), float(msg.y), float(msg.z))
         if point.z <= 0:
             self.node.get_logger().warn("Ignoring target point with non-positive depth")
             return
-        object_index = len(self.completed_points) + 1
-        self.node.get_logger().info(
-            f"Captured object {object_index}/2: camera=({point.x:.1f}, {point.y:.1f}, {point.z:.1f})"
-        )
-        self.executing = True
-        try:
-            self.execute_steps(_steps_for_object(object_index, point, self.config))
-            self.completed_points.append(point)
-            if len(self.completed_points) == 2:
-                self.execute_steps([PickPlaceStep("start_conveyor_after_two_objects", "conveyor", conveyor_action="start")])
-                self.publish_status("COMPLETED_TWO_OBJECT_PICK_PLACE")
-            else:
-                self.publish_status("COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2")
-        finally:
-            self.executing = False
+        object_index = self.coordinator.completed_count + 1
+        accepted = self.coordinator.accept_target(point)
+        if accepted:
+            self.node.get_logger().info(
+                f"Captured object {object_index}/2: camera=({point.x:.1f}, {point.y:.1f}, {point.z:.1f})"
+            )
+        else:
+            self.node.get_logger().debug("Ignoring target point while object execution is already in progress")
 
     def execute_plan(self, plan: PickPlacePlan) -> None:
         self.execute_steps(plan.steps)
@@ -250,16 +303,23 @@ class TwoObjectPickPlaceNode:
         goal_msg = self.PointToPoint.Goal()
         goal_msg.target_pose = [float(v) for v in target_pose]
         goal_msg.motion_type = self.motion_type
-        self.action_client.wait_for_server()
+        self.node.get_logger().info(f"Waiting for Dobot action server {self.ptp_action}")
+        if not self.action_client.wait_for_server(timeout_sec=10.0):
+            raise RuntimeError(f"Dobot action server unavailable: {self.ptp_action}")
         future = self.action_client.send_goal_async(goal_msg)
-        import rclpy
-
-        rclpy.spin_until_future_complete(self.node, future)
+        self._wait_for_future(future, timeout_sec=15.0, description="Dobot goal response")
         goal_handle = future.result()
         if not goal_handle or not goal_handle.accepted:
             raise RuntimeError(f"Dobot goal rejected: {target_pose}")
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result_future)
+        self._wait_for_future(result_future, timeout_sec=60.0, description="Dobot goal result")
+
+    @staticmethod
+    def _wait_for_future(future: Any, timeout_sec: float, description: str) -> None:
+        done = threading.Event()
+        future.add_done_callback(lambda _future: done.set())
+        if not done.wait(timeout=timeout_sec):
+            raise TimeoutError(f"Timed out waiting for {description}")
 
     def set_vacuum(self, enable: bool) -> None:
         if not self.vacuum_client.wait_for_service(timeout_sec=2.0):
@@ -268,9 +328,7 @@ class TwoObjectPickPlaceNode:
         request = self.SuctionCupControl.Request()
         request.enable_suction = enable
         future = self.vacuum_client.call_async(request)
-        import rclpy
-
-        rclpy.spin_until_future_complete(self.node, future)
+        self._wait_for_future(future, timeout_sec=10.0, description="Dobot suction service response")
 
     def destroy_node(self) -> None:
         self.node.destroy_node()
