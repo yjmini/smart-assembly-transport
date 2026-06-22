@@ -118,11 +118,13 @@ AttributeError: `np.maximum_sctype` was removed in the NumPy 2.0 release
 
 원인은 `tf_transformations -> transforms3d`가 `~/.local/lib/python3.10/site-packages/numpy`의 NumPy 2.x를 잡고 있는데, 현재 설치된 `transforms3d`가 NumPy 2.x에서 제거된 API를 사용하기 때문입니다. 이 경우 `PTP_server`, `trajectory_validator_server`, `state_publisher`가 죽어서 `PTP_action`이 나타나지 않습니다.
 
-가장 단순한 조치:
+가장 단순한 조치. 실제 Dobot bringup에서 `PTP_action` 복구가 확인된 버전은 `numpy==1.23.5`입니다.
 
 ```bash
-python3 -m pip install --user --force-reinstall 'numpy<2'
+python3 -m pip install --user --force-reinstall numpy==1.23.5
 ```
+
+설치 중 `opencv-python ... requires numpy>=2` 경고가 나올 수 있지만, Dobot ROS2 bringup에는 `tf_transformations/transforms3d` 호환성이 더 우선입니다. 이 경고는 pip resolver 경고이며, 설치가 `Successfully installed numpy-1.23.5`로 끝나고 `PTP_action`이 뜨면 Dobot 쪽은 정상입니다.
 
 설치 후 새 터미널을 열고 다시 확인합니다.
 
