@@ -1,0 +1,122 @@
+import importlib.util
+import json
+import sys
+import types
+from pathlib import Path
+
+
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "edge" / "conveyor_control.py"
+
+
+class FakeOutputDevice:
+    events = []
+
+    def __init__(self, pin, active_high=True, initial_value=False):
+        self.pin = pin
+        self.active_high = active_high
+        self.value = initial_value
+        FakeOutputDevice.events.append(("init", pin, active_high, initial_value))
+
+    def on(self):
+        self.value = True
+        FakeOutputDevice.events.append(("on", self.pin))
+
+    def off(self):
+        self.value = False
+        FakeOutputDevice.events.append(("off", self.pin))
+
+
+class FakeSleep:
+    calls = []
+
+    def __call__(self, seconds):
+        self.calls.append(seconds)
+
+
+def load_edge_module(monkeypatch, tmp_path, env=None):
+    FakeOutputDevice.events = []
+    fake_gpiozero = types.ModuleType("gpiozero")
+    fake_gpiozero.DigitalOutputDevice = FakeOutputDevice
+    monkeypatch.setitem(sys.modules, "gpiozero", fake_gpiozero)
+    monkeypatch.setenv("CONVEYOR_STATE_FILE", str(tmp_path / "state.json"))
+    for key, value in (env or {}).items():
+        monkeypatch.setenv(key, str(value))
+
+    spec = importlib.util.spec_from_file_location("edge_conveyor_control_test", SCRIPT_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sleeper = FakeSleep()
+    monkeypatch.setattr(module.time, "sleep", sleeper)
+    return module, sleeper
+
+
+def test_stepper_start_pulses_step_pin_and_records_configuration(monkeypatch, tmp_path):
+    module, sleeper = load_edge_module(
+        monkeypatch,
+        tmp_path,
+        {
+            "CONVEYOR_MODE": "stepper",
+            "CONVEYOR_STEP_PIN": 20,
+            "CONVEYOR_DIR_PIN": 21,
+            "CONVEYOR_ENABLE_PIN": 16,
+            "CONVEYOR_STEPS": 3,
+            "CONVEYOR_STEP_DELAY_SEC": "0.0005",
+        },
+    )
+
+    result = module.run_action("start")
+
+    assert result["state"] == "MOVED"
+    assert result["gpio_available"] is True
+    assert result["mode"] == "stepper"
+    assert result["step_pin"] == 20
+    assert result["dir_pin"] == 21
+    assert result["enable_pin"] == 16
+    assert result["steps"] == 3
+    assert FakeOutputDevice.events.count(("on", 20)) == 3
+    assert FakeOutputDevice.events.count(("off", 20)) == 3
+    assert ("off", 21) in FakeOutputDevice.events
+    assert ("on", 16) in FakeOutputDevice.events
+    assert ("off", 16) in FakeOutputDevice.events
+    assert sleeper.calls == [0.0005] * 6
+
+
+def test_stepper_stop_and_emergency_stop_disable_enable_pin(monkeypatch, tmp_path):
+    module, _ = load_edge_module(
+        monkeypatch,
+        tmp_path,
+        {
+            "CONVEYOR_MODE": "stepper",
+            "CONVEYOR_STEP_PIN": 20,
+            "CONVEYOR_DIR_PIN": 21,
+            "CONVEYOR_ENABLE_PIN": 16,
+        },
+    )
+
+    stop = module.run_action("stop")
+    emergency = module.run_action("emergency-stop")
+
+    assert stop["state"] == "STOPPED"
+    assert emergency["state"] == "EMERGENCY_STOPPED"
+    assert FakeOutputDevice.events.count(("off", 16)) == 2
+
+
+def test_status_reads_previous_stepper_state(monkeypatch, tmp_path):
+    module, _ = load_edge_module(
+        monkeypatch,
+        tmp_path,
+        {
+            "CONVEYOR_MODE": "stepper",
+            "CONVEYOR_STEP_PIN": 20,
+            "CONVEYOR_DIR_PIN": 21,
+            "CONVEYOR_ENABLE_PIN": 16,
+            "CONVEYOR_STEPS": 2,
+        },
+    )
+
+    moved = module.run_action("start")
+    status = module.run_action("status")
+
+    assert status == json.loads(Path(moved["state_file"]).read_text(encoding="utf-8"))
+    assert status["state"] == "MOVED"
+    assert status["mode"] == "stepper"

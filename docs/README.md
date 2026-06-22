@@ -21,6 +21,7 @@
 | 13 | [13-local-mock-runbook.md](./13-local-mock-runbook.md) | 하드웨어 없이 로컬에서 mock 공정 검증 |
 | 14 | [14-real-hardware-runbook.md](./14-real-hardware-runbook.md) | 실제 Conveyor/TurtleBot/Dobot dry-run 및 실행 |
 | 15 | [15-reference-adaptation.md](./15-reference-adaptation.md) | project_pill 참고 패턴을 우리 프로젝트에 맞게 적용한 기준 |
+| 16 | [16-full-project-runbook.md](./16-full-project-runbook.md) | 처음부터 끝까지 코드 검증, UI 실행, 실제 하드웨어 테스트를 진행하는 전체 실행 절차 |
 
 ## 빠른 요약
 

@@ -36,6 +36,13 @@ def test_conveyor_command_builder_wraps_remote_commands_safely():
 
     assert start[:3] == ["ssh", "-o", "BatchMode=yes"]
     assert "ssafy@192.168.110.142" in start
+    assert "CONVEYOR_MODE=stepper" in start[-1]
+    assert "CONVEYOR_STEP_PIN=27" in start[-1]
+    assert "CONVEYOR_DIR_PIN=17" in start[-1]
+    assert "CONVEYOR_ENABLE_PIN=22" in start[-1]
+    assert "CONVEYOR_ENABLE_ACTIVE_HIGH=0" in start[-1]
+    assert "CONVEYOR_DIR_ACTIVE_HIGH=0" in start[-1]
+    assert "CONVEYOR_GPIO_BACKEND=gpiod" in start[-1]
     assert "conveyor_control.py start" in start[-1]
     assert "conveyor_control.py stop" in stop[-1]
 
