@@ -4,83 +4,152 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Smart Assembly Transport Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, Arial, sans-serif; background: #08111f; color: #e8eefc; }
-    .app { min-height: 100vh; padding: 26px; }
-    .topbar { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:20px; }
-    h1 { margin:0; font-size:28px; letter-spacing:-.04em; } h2 { margin:0 0 14px; font-size:17px; }
-    .subtitle { color:#95a6c7; margin-top:6px; }
-    .status-pill { padding:10px 14px; border-radius:999px; background:#18253f; border:1px solid #33466f; font-weight:800; }
-    .connected { background:#063b2b; border-color:#20c77d; color:#a9f7d1; } .error { background:#46151c; border-color:#ff5a6d; color:#ffc0c8; }
-    .layout { display:grid; grid-template-columns: 1.1fr .9fr; gap:18px; }
-    .card { background:rgba(17,28,52,.92); border:1px solid #23375d; border-radius:22px; padding:20px; box-shadow:0 22px 70px rgba(0,0,0,.3); }
-    .controls, .mini-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-    button, select, input { font:inherit; border:0; border-radius:13px; padding:12px 13px; }
-    button { cursor:pointer; color:white; background:#3155ff; font-weight:850; } button:hover { filter:brightness(1.08); transform:translateY(-1px); }
-    button.secondary { background:#263653; } button.danger { background:#e9354f; } button.safe { background:#149363; } button.real { background:#8754ff; } button.warn { background:#c98319; }
-    select,input { background:#0c162b; color:#e8eefc; border:1px solid #2a3c63; }
-    .pipeline { display:grid; gap:9px; }
-    .step { display:grid; grid-template-columns:30px 1fr auto; gap:10px; align-items:center; padding:11px; border-radius:15px; background:#0c162b; border:1px solid #273b62; color:#91a2c3; }
-    .step .num { width:26px; height:26px; display:grid; place-items:center; border-radius:50%; background:#223052; color:#9aa8c7; font-size:12px; font-weight:900; }
-    .step.active { border-color:#79a9ff; color:white; background:linear-gradient(90deg,#17316f,#0e1a33); } .step.done { border-color:#1faf75; color:#abf6d0; }
-    .step.done .num { background:#0f6a49; color:white; }
-    .tag { font-size:12px; color:#9aa8c7; }
-    .log { height:370px; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
-    .log-row { white-space:pre-wrap; padding:10px 12px; border-radius:12px; background:#0c162b; border:1px solid #22375d; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; color:#c6d3ef; }
-    .hardware { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:18px; }
-    .hw { padding:14px; border-radius:16px; background:#0c162b; border:1px solid #273b62; min-height:110px; }
-    .hw b { display:block; margin-bottom:7px; } .hw code { color:#9ff2c9; }
-    .notice { margin:12px 0 0; color:#ffd98a; background:#34280c; border:1px solid #6b5319; padding:12px; border-radius:14px; line-height:1.5; }
-    label.toggle { display:flex; gap:8px; align-items:center; padding:12px; border-radius:14px; background:#0c162b; border:1px solid #2a3c63; }
-    label.toggle input { width:auto; }
-    @media (max-width:1000px){ .layout,.hardware,.controls,.mini-grid{grid-template-columns:1fr;} .app{padding:15px;} }
+    :root{
+      --bg:#08090a; --panel:#0f1011; --surface:#191a1b; --surface2:#202126;
+      --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.05);
+      --text:#f7f8f8; --muted:#8a8f98; --sub:#d0d6e0; --dim:#62666d;
+      --accent:#7170ff; --accent2:#5e6ad2; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --blue:#38bdf8;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:radial-gradient(circle at 20% 0%,rgba(94,106,210,.22),transparent 34%),linear-gradient(180deg,#090a0d,#050506);color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-feature-settings:"cv01","ss03";}
+    .app{min-height:100vh;padding:22px;max-width:1680px;margin:0 auto}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:18px;padding:16px 18px;border:1px solid var(--line2);border-radius:22px;background:rgba(15,16,17,.78);backdrop-filter:blur(16px)}
+    h1{margin:0;font-size:26px;font-weight:510;letter-spacing:-.7px}.subtitle{margin-top:5px;color:var(--muted);font-size:13px}.top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .status-pill,.badge{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--sub);font-size:12px;font-weight:600}.connected{color:#9ff6cf;border-color:rgba(16,185,129,.45);background:rgba(16,185,129,.12)}.error{color:#fecdd3;border-color:rgba(239,68,68,.48);background:rgba(239,68,68,.12)}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}.side-grid{display:grid;grid-template-columns:1fr;gap:16px}.wide-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:0 22px 70px rgba(0,0,0,.32)}
+    .card h2{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 13px;font-size:15px;font-weight:600;letter-spacing:-.18px}.eyebrow{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.8px}.muted{color:var(--muted)}
+    button,select,input{font:inherit;border:0;border-radius:12px;padding:11px 12px}button{cursor:pointer;color:var(--text);background:rgba(255,255,255,.045);border:1px solid var(--line);font-weight:600;transition:.15s ease}button:hover{border-color:rgba(113,112,255,.55);transform:translateY(-1px)}button.primary{background:linear-gradient(135deg,var(--accent2),#8754ff);border-color:rgba(255,255,255,.12)}button.danger{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.35)}button.safe{background:rgba(16,185,129,.14);border-color:rgba(16,185,129,.36)}button.warn{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.38)}
+    select,input{background:rgba(255,255,255,.035);color:var(--text);border:1px solid var(--line);min-width:0}.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.mini-grid{display:grid;grid-template-columns:1.4fr .8fr;gap:9px;margin-top:9px}label.toggle{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;padding:10px;color:var(--sub);font-size:13px}label.toggle input{width:auto}
+    .hero-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}.metric{padding:14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.025)}.metric b{display:block;font-size:28px;letter-spacing:-.8px}.metric span{color:var(--muted);font-size:12px}.metric.ok b{color:var(--ok)}.metric.warn b{color:var(--warn)}.metric.blue b{color:var(--blue)}
+    .stage-strip{display:grid;grid-template-columns:repeat(11,minmax(50px,1fr));gap:7px}.stage{min-height:74px;padding:9px;border:1px solid var(--line2);border-radius:14px;background:rgba(255,255,255,.025);color:var(--dim);position:relative;overflow:hidden}.stage:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:rgba(255,255,255,.06)}.stage.done{color:#bff7df;border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.08)}.stage.done:before{background:var(--ok)}.stage.active{color:var(--text);border-color:rgba(113,112,255,.7);background:linear-gradient(180deg,rgba(113,112,255,.18),rgba(255,255,255,.025))}.stage.active:before{background:var(--accent)}.stage .n{font-family:'JetBrains Mono';font-size:11px;color:var(--muted)}.stage .label{font-size:12px;font-weight:600;margin-top:8px;line-height:1.25}.stage .state{font-family:'JetBrains Mono';font-size:10px;color:var(--dim);margin-top:5px;word-break:break-all}
+    .camera-shell{position:relative;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:linear-gradient(135deg,#111827,#030712);border:1px solid var(--line)}#cameraFeed{width:100%;height:100%;object-fit:cover;display:none}.camera-placeholder{position:absolute;inset:0;display:grid;place-items:center;background-image:linear-gradient(rgba(113,112,255,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(113,112,255,.1) 1px,transparent 1px);background-size:32px 32px}.camera-placeholder div{text-align:center}.camera-placeholder strong{display:block;font-size:20px}.camera-overlay{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:space-between;gap:8px}.chip{font-family:'JetBrains Mono';font-size:11px;padding:6px 8px;border-radius:999px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);color:var(--sub)}.camera-tools{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}
+    .map-wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:12px;align-items:stretch}#slamMap{width:100%;height:260px;border-radius:18px;border:1px solid var(--line);background:#07080a}.pose-list{display:grid;gap:8px}.pose-row{display:flex;justify-content:space-between;gap:10px;padding:10px;border-radius:12px;background:rgba(255,255,255,.026);border:1px solid var(--line2);font-family:'JetBrains Mono';font-size:12px}.pose-row span:first-child{color:var(--muted)}
+    .stt-box{display:grid;gap:10px}.transcript{min-height:92px;padding:14px;border-radius:16px;background:rgba(113,112,255,.09);border:1px solid rgba(113,112,255,.25);font-size:18px;line-height:1.45}.intent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.intent{padding:10px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line2)}.intent small{display:block;color:var(--muted);font-size:11px}.intent b{font-family:'JetBrains Mono';font-size:13px}
+    .timeline{height:270px;overflow:auto;display:flex;flex-direction:column;gap:8px}.log{height:310px;overflow:auto;display:flex;flex-direction:column;gap:8px}.log-row,.timeline-row{white-space:pre-wrap;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line2);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#c6d3ef}.timeline-row strong{font-family:'Inter';font-size:13px}.timeline-row .time{color:var(--dim);font-size:10px;margin-left:6px}
+    .hardware{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:16px}.hw{padding:13px;border-radius:16px;background:rgba(255,255,255,.025);border:1px solid var(--line);min-height:96px}.hw b{display:block;margin-bottom:7px}.hw code{color:#9ff2c9;font-family:'JetBrains Mono';font-size:11px}.tag{font-size:12px;color:var(--muted);line-height:1.4}.notice{margin:10px 0 0;color:#ffd98a;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28);padding:11px;border-radius:14px;line-height:1.5;font-size:13px}
+    @media (max-width:1180px){.grid,.wide-grid,.map-wrap{grid-template-columns:1fr}.stage-strip{grid-template-columns:repeat(4,1fr)}.hardware,.hero-metrics{grid-template-columns:repeat(2,1fr)}}
+    @media (max-width:720px){.app{padding:12px}.topbar{align-items:flex-start;flex-direction:column}.controls,.mini-grid,.intent-grid,.hardware,.hero-metrics{grid-template-columns:1fr}.stage-strip{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <main class="app">
   <header class="topbar">
-    <div><h1>Smart Assembly Transport Control Center</h1><div class="subtitle">Mock 검증 + 실제 Conveyor Pi / TurtleBot4 연동 준비 대시보드</div></div>
-    <div id="connection" class="status-pill">DISCONNECTED</div>
+    <div>
+      <div class="eyebrow">AUTOMATED ASSEMBLY + AUTONOMOUS DELIVERY</div>
+      <h1>Smart Assembly Transport Control Center</h1>
+      <div class="subtitle">RealSense D435i · YOLO · SLAM · STT · Dobot · Conveyor · TurtleBot 운영 대시보드</div>
+    </div>
+    <div class="top-actions"><div id="connection" class="status-pill">DISCONNECTED</div><div id="modeBadge" class="badge">DRY-RUN READY</div></div>
   </header>
-  <section class="layout">
-    <div class="card"><h2>공정 상태</h2><div id="pipeline" class="pipeline"></div></div>
-    <div class="card">
-      <h2>작업 제어</h2>
-      <div class="controls">
-        <select id="destination"><option value="A">A 구역 배송</option><option value="B">B 구역 배송</option></select>
-        <button id="connectBtn" class="secondary">WebSocket 연결</button>
-        <button id="startBtn">Mock 작업 시작</button>
-        <button id="nextBtn" class="secondary">다음 mock 이벤트</button>
-        <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
-        <button id="unlockBtn" class="safe">관리자 Unlock</button>
-        <button id="hwStatusBtn" class="real">실제 하드웨어 구성 불러오기</button>
-        <button id="hwPlanBtn" class="real">실제 파이프라인 계획 보기</button>
-        <button id="hwRunBtn" class="warn">실제 order plan 실행</button>
-        <button id="resetBtn" class="secondary">UI 로그 초기화</button>
-      </div>
-      <div class="mini-grid" style="margin-top:10px"><input id="serverUrl" value="ws://127.0.0.1:8765" /><label class="toggle"><input id="executeToggle" type="checkbox" /> 실제 명령 실행 모드</label></div>
-      <p class="notice">기본은 DRY-RUN입니다. 실제 명령 실행 모드를 켜야 SSH 명령이 Conveyor Pi/TurtleBot으로 전송됩니다.</p>
+
+  <section id="productivityCards" class="hero-metrics" aria-label="생산성 지표">
+    <div class="metric ok"><b id="completedCycles">0</b><span>완료 사이클</span></div>
+    <div class="metric blue"><b id="assembledCount">0</b><span>조립 완료 수량</span></div>
+    <div class="metric ok"><b id="deliveryCount">0</b><span>배송 완료 횟수</span></div>
+    <div class="metric warn"><b id="emergencyStopCount">0</b><span>비상정지 횟수</span></div>
+  </section>
+
+  <section class="card" id="flowOverview">
+    <h2><span>전체 진행상황</span><span class="eyebrow" id="currentStateLabel">IDLE</span></h2>
+    <div id="stageStrip" class="stage-strip"></div>
+  </section>
+
+  <section class="grid" style="margin-top:16px">
+    <div class="side-grid">
+      <section class="card" id="realsensePanel">
+        <h2><span>RealSense D435i · YOLO 실시간 화면</span><span class="eyebrow" id="visionStatus">STREAM WAITING</span></h2>
+        <div class="camera-shell">
+          <img id="cameraFeed" alt="RealSense D435i YOLO 실시간 화면" />
+          <div id="cameraPlaceholder" class="camera-placeholder"><div><strong>YOLO Preview</strong><span class="muted">MJPEG/HTTP stream URL을 연결하면 여기에 표시됩니다.</span></div></div>
+          <div class="camera-overlay"><span class="chip">/camera/camera/color/image_raw</span><span class="chip" id="detectionChip">detections: waiting</span></div>
+        </div>
+        <div class="camera-tools"><input id="cameraUrl" value="http://127.0.0.1:8080/stream?topic=/camera/camera/color/image_raw" /><button id="cameraConnectBtn">카메라 스트림 연결</button></div>
+      </section>
+
+      <section class="card">
+        <h2><span>SLAM / TurtleBot 위치</span><span class="eyebrow">MAP FRAME</span></h2>
+        <div class="map-wrap">
+          <canvas id="slamMap" width="620" height="360" aria-label="SLAM 상에서의 TurtleBot 현재 위치"></canvas>
+          <div id="turtlePose" class="pose-list">
+            <div class="pose-row"><span>destination</span><b id="poseDestination">A</b></div>
+            <div class="pose-row"><span>x</span><b id="poseX">0.00</b></div>
+            <div class="pose-row"><span>y</span><b id="poseY">0.00</b></div>
+            <div class="pose-row"><span>yaw</span><b id="poseYaw">0.00</b></div>
+            <div class="pose-row"><span>status</span><b id="poseStatus">대기</b></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="side-grid">
+      <section class="card">
+        <h2><span>작업 제어</span><span class="eyebrow">COMMAND</span></h2>
+        <div class="controls">
+          <select id="destination"><option value="A">A 구역 배송</option><option value="B">B 구역 배송</option></select>
+          <button id="connectBtn">WebSocket 연결</button>
+          <button id="startBtn" class="primary">STT/Mock 작업 시작</button>
+          <button id="nextBtn">다음 mock 이벤트</button>
+          <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
+          <button id="unlockBtn" class="safe">관리자 Unlock</button>
+          <button id="hwStatusBtn">하드웨어 구성</button>
+          <button id="hwPlanBtn">파이프라인 계획</button>
+          <button id="hwRunBtn" class="warn">실제 order plan 실행</button>
+          <button id="resetBtn">UI 상태 초기화</button>
+        </div>
+        <div class="mini-grid"><input id="serverUrl" value="ws://127.0.0.1:8765" /><label class="toggle"><input id="executeToggle" type="checkbox" /> 실제 명령 실행 모드</label></div>
+        <p class="notice">기본은 DRY-RUN입니다. 실제 명령 실행 모드를 켜야 SSH/ROS 명령이 장비로 전송됩니다.</p>
+      </section>
+
+      <section class="card" id="sttPanel">
+        <h2><span>STT 명령 확인</span><span class="eyebrow" id="sttStatus">LAST COMMAND</span></h2>
+        <div class="stt-box">
+          <div id="sttTranscript" class="transcript">아직 수신된 STT/작업 명령이 없습니다.</div>
+          <div class="intent-grid">
+            <div class="intent"><small>intent</small><b id="sttIntent">create_order</b></div>
+            <div class="intent"><small>destination</small><b id="sttDestination">A</b></div>
+            <div class="intent"><small>parts</small><b id="sttParts">base, top</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span>작업 타임라인</span><span class="eyebrow">EVENTS</span></h2>
+        <div id="operationsTimeline" class="timeline"></div>
+      </section>
     </div>
   </section>
+
   <section class="hardware" id="hardwareCards"></section>
-  <section class="card" style="margin-top:18px"><h2>이벤트 / 하드웨어 로그</h2><div id="log" class="log"></div></section>
+  <section class="card" style="margin-top:16px"><h2><span>이벤트 / 하드웨어 로그</span><span class="eyebrow">RAW</span></h2><div id="log" class="log"></div></section>
 </main>
 <script>
-const states=[['ORDER_RECEIVED','작업 명령 수신'],['CONVEYOR_MOVING','컨베이어 동작'],['BASE_DETECTED_STOPPING','베이스 정위치 감지 / 정지 요청'],['ASSEMBLY_STAGE_1','Dobot A 부품 pick & place'],['ASSEMBLY_STAGE_2','Dobot B 부품 stack'],['QC_CHECK','비전 품질 확인'],['LOADING_TO_TURTLEBOT','TurtleBot 적재'],['DELIVERY_NAVIGATING','Nav2 배송 이동'],['DELIVERED','배송 완료'],['RETURNING_HOME','TurtleBot 시작 위치 복귀'],['RETURNED_HOME','복귀 완료 / 다음 작업 대기']];
+const states=[['ORDER_RECEIVED','작업 명령 수신'],['CONVEYOR_MOVING','컨베이어 이동'],['BASE_DETECTED_STOPPING','비전 정위치 감지'],['ASSEMBLY_STAGE_1','Dobot 1차 조립'],['ASSEMBLY_STAGE_2','Dobot 2차 조립'],['QC_CHECK','YOLO/비전 품질 확인'],['LOADING_TO_TURTLEBOT','TurtleBot 적재'],['DELIVERY_NAVIGATING','SLAM/Nav2 배송'],['DELIVERED','배송 완료'],['RETURNING_HOME','시작 위치 복귀'],['RETURNED_HOME','다음 작업 대기']];
 const mockEvents=[{type:'event',event:'conveyor.started'},{type:'event',event:'vision.base_in_position'},{type:'event',event:'conveyor.stopped'},{type:'event',event:'dobot.assembly_stage_1_done'},{type:'event',event:'dobot.assembly_stage_2_done'},{type:'event',event:'vision.qc_passed'},{type:'event',event:'dobot.loaded_to_turtlebot'},{type:'event',event:'turtlebot.delivery_arrived'},{type:'event',event:'turtlebot.return_requested'},{type:'event',event:'turtlebot.return_arrived'}];
-let ws=null,currentState=null,eventIndex=0; const $=id=>document.getElementById(id);
-function renderPipeline(){const idx=states.findIndex(([s])=>s===currentState);$('pipeline').innerHTML=states.map(([s,l],i)=>`<div class="step ${i<idx?'done':i===idx?'active':''}"><div class="num">${i+1}</div><div><b>${l}</b><div class="tag">${s}</div></div><div>${i<idx?'완료':i===idx?'진행중':'대기'}</div></div>`).join('')}
-function log(msg,data){const row=document.createElement('div');row.className='log-row';row.textContent=`${new Date().toLocaleTimeString()} ${msg}`+(data?`\n${JSON.stringify(data,null,2)}`:'');$('log').prepend(row)}
+const state={currentState:null,eventIndex:0,lastSttCommand:'',completedCycles:0,assembledCount:0,deliveryCount:0,emergencyStopCount:0,turtlePose:{x:0,y:0,yaw:0,destination:'A',status:'대기'},hardwareTargets:{A:{x:1.2,y:0,yaw:0},B:{x:0,y:1.2,yaw:1.5708},HOME:{x:0,y:0,yaw:0}}};
+let ws=null; const $=id=>document.getElementById(id);
 function setConn(t,c=''){const el=$('connection');el.className=`status-pill ${c}`;el.textContent=t}
-async function connect(){if(ws&&ws.readyState===WebSocket.OPEN)return;ws=new WebSocket($('serverUrl').value);ws.onopen=()=>{setConn('CONNECTED','connected');log('connected')};ws.onerror=()=>{setConn('ERROR','error');log('websocket error')};ws.onclose=()=>{setConn('DISCONNECTED');log('disconnected')};ws.onmessage=ev=>{const d=JSON.parse(ev.data);if(d.state)currentState=d.state;if(d.type==='hardware.status'||d.type==='hardware.pipeline')renderHardware(d);log('recv',d);renderPipeline();};}
-function send(msg){if(!ws||ws.readyState!==WebSocket.OPEN){log('먼저 WebSocket 연결을 누르세요');return;}log('send',msg);ws.send(JSON.stringify(msg));}
-function renderHardware(data){let s=data.type==='hardware.pipeline'?data:data; const cards=[]; if(s.conveyor)cards.push(['Conveyor Pi',s.conveyor.target||s.conveyor.host,`SSH ${s.conveyor.ssh_port||22}`]); if(s.turtlebot)cards.push(['TurtleBot4',s.turtlebot.target||s.turtlebot.host,`ROS_DOMAIN_ID=${s.turtlebot.ros_domain_id} / home=${s.turtlebot.home_destination||'HOME'}`]); if(s.dobot)cards.push(['Dobot',s.dobot.action_name||s.dobot.ptp_action||s.dobot.mode,`${(s.dobot.target_poses||[]).length||'PTP'} steps`]); if(s.vision)cards.push(['Vision',s.vision.camera_topic||'camera',`base=${s.vision.base_color||'yellow'}`]); if(s.phases)cards.push(['Demo Phases',`${s.phases.length} checkpoints`,s.phases.map(p=>p.id).join(' → ')]); $('hardwareCards').innerHTML=cards.map(([a,b,c])=>`<div class="hw"><b>${a}</b><code>${b}</code><div class="tag">${c}</div></div>`).join('');}
-$('connectBtn').onclick=connect;$('startBtn').onclick=async()=>{await connect();eventIndex=0;send({type:'order.create',command:'A 물체를 컨베이어에 올리고 B 물체를 그 위에 조립한 뒤 배송',destination:$('destination').value,parts:['base','top']})};
-$('nextBtn').onclick=()=>{if(eventIndex>=mockEvents.length){log('더 이상 보낼 mock 이벤트가 없습니다');return;}send(mockEvents[eventIndex++])};
-$('stopBtn').onclick=()=>send({type:'event',event:'safety.hand_detected',payload:{source:'dashboard'}});$('unlockBtn').onclick=()=>send({type:'admin.unlock',admin:'operator'});
-$('hwStatusBtn').onclick=()=>send({type:'hardware.status'});$('hwPlanBtn').onclick=()=>send({type:'hardware.pipeline'});$('hwRunBtn').onclick=()=>send({type:'hardware.run_order_plan',destination:$('destination').value,execute:$('executeToggle').checked});
-$('resetBtn').onclick=()=>{$('log').innerHTML='';currentState=null;eventIndex=0;renderPipeline()};renderPipeline();
+function addTimeline(title, detail=''){const row=document.createElement('div');row.className='timeline-row';row.innerHTML=`<strong>${title}</strong><span class="time">${new Date().toLocaleTimeString()}</span>${detail?`<div class="muted">${detail}</div>`:''}`;$('operationsTimeline').prepend(row)}
+function log(msg,data){const row=document.createElement('div');row.className='log-row';row.textContent=`${new Date().toLocaleTimeString()} ${msg}`+(data?`\n${JSON.stringify(data,null,2)}`:'');$('log').prepend(row)}
+function stateIndex(){return states.findIndex(([s])=>s===state.currentState)}
+function renderFlowOverview(){const idx=stateIndex();$('currentStateLabel').textContent=state.currentState||'IDLE';$('stageStrip').innerHTML=states.map(([s,l],i)=>`<div class="stage ${i<idx?'done':i===idx?'active':''}"><div class="n">${String(i+1).padStart(2,'0')}</div><div class="label">${l}</div><div class="state">${s}</div></div>`).join('')}
+function renderProductivity(){$('completedCycles').textContent=state.completedCycles;$('assembledCount').textContent=state.assembledCount;$('deliveryCount').textContent=state.deliveryCount;$('emergencyStopCount').textContent=state.emergencyStopCount}
+function renderSttCommand(){$('sttTranscript').textContent=state.lastSttCommand||'아직 수신된 STT/작업 명령이 없습니다.';$('sttDestination').textContent=state.turtlePose.destination;$('sttParts').textContent='base, top'}
+function renderSlamMap(){const canvas=$('slamMap'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#07080a';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;for(let x=35;x<w;x+=35){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=35;y<h;y+=35){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}const toPx=(p)=>({x:w/2+p.x*110,y:h/2-p.y*110});Object.entries(state.hardwareTargets).forEach(([name,p])=>{const q=toPx(p);ctx.fillStyle=name==='HOME'?'#10b981':'#7170ff';ctx.beginPath();ctx.arc(q.x,q.y,7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#d0d6e0';ctx.font='12px JetBrains Mono';ctx.fillText(name,q.x+10,q.y-10)});const p=toPx(state.turtlePose);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-state.turtlePose.yaw);ctx.fillStyle='#38bdf8';ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,-9);ctx.lineTo(-6,0);ctx.lineTo(-10,9);ctx.closePath();ctx.fill();ctx.restore();$('poseDestination').textContent=state.turtlePose.destination;$('poseX').textContent=state.turtlePose.x.toFixed(2);$('poseY').textContent=state.turtlePose.y.toFixed(2);$('poseYaw').textContent=state.turtlePose.yaw.toFixed(2);$('poseStatus').textContent=state.turtlePose.status}
+function updateOperationsFromEvent(d){if(d.type==='factory.state'&&d.state){state.currentState=d.state;const payload=d.payload||{};if(payload.command) addTimeline(d.state,payload.command); if(d.state==='ASSEMBLY_STAGE_2') state.assembledCount+=1; if(d.state==='DELIVERED'){state.deliveryCount+=1;state.turtlePose.status='배송 완료'} if(d.state==='RETURNED_HOME'){state.completedCycles+=1;state.turtlePose={...state.turtlePose,x:0,y:0,yaw:0,status:'복귀 완료'}} if(d.state==='DELIVERY_NAVIGATING'){const target=state.hardwareTargets[state.turtlePose.destination]||state.hardwareTargets.A;state.turtlePose={...state.turtlePose,...target,status:'배송 이동 중'}} if(d.state==='RETURNING_HOME'){state.turtlePose.status='HOME 복귀 중'}} if(d.type==='hardware.run_order_plan.result'){(d.events||[]).forEach(updateOperationsFromEvent)} if(d.type==='factory.error') addTimeline('ERROR',d.message); renderAll()}
+function renderHardware(data){let s=data.type==='hardware.pipeline'?data:data; const cards=[]; if(s.conveyor)cards.push(['Conveyor Pi',s.conveyor.target||s.conveyor.host,`SSH ${s.conveyor.ssh_port||22}`]); if(s.turtlebot){state.hardwareTargets=s.turtlebot.targets||state.hardwareTargets;cards.push(['TurtleBot4',s.turtlebot.target||s.turtlebot.host,`ROS_DOMAIN_ID=${s.turtlebot.ros_domain_id} / home=${s.turtlebot.home_destination||'HOME'}`])} if(s.dobot)cards.push(['Dobot',s.dobot.action_name||s.dobot.ptp_action||s.dobot.mode,`${(s.dobot.target_poses||[]).length||'PTP'} steps`]); if(s.vision)cards.push(['RealSense D435i',s.vision.camera_topic||'camera',`YOLO base=${s.vision.base_color||'yellow'}`]); if(s.phases)cards.push(['Demo Phases',`${s.phases.length} checkpoints`,s.phases.map(p=>p.id).join(' → ')]); $('hardwareCards').innerHTML=cards.map(([a,b,c])=>`<div class="hw"><b>${a}</b><code>${b}</code><div class="tag">${c}</div></div>`).join(''); renderSlamMap()}
+function renderAll(){renderFlowOverview();renderProductivity();renderSttCommand();renderSlamMap();$('modeBadge').textContent=$('executeToggle').checked?'REAL EXECUTION ARMED':'DRY-RUN READY'}
+async function connect(){if(ws&&ws.readyState===WebSocket.OPEN)return;ws=new WebSocket($('serverUrl').value);ws.onopen=()=>{setConn('CONNECTED','connected');log('connected');addTimeline('WebSocket 연결','server.app')};ws.onerror=()=>{setConn('ERROR','error');log('websocket error')};ws.onclose=()=>{setConn('DISCONNECTED');log('disconnected')};ws.onmessage=ev=>{const d=JSON.parse(ev.data);if(d.type==='hardware.status'||d.type==='hardware.pipeline')renderHardware(d);updateOperationsFromEvent(d);log('recv',d)}}
+function send(msg){if(!ws||ws.readyState!==WebSocket.OPEN){log('먼저 WebSocket 연결을 누르세요');return;}if(msg.type==='order.create'){state.lastSttCommand=msg.command;state.turtlePose.destination=msg.destination;state.turtlePose.status='작업 접수';addTimeline('STT 명령 수신',msg.command)}log('send',msg);ws.send(JSON.stringify(msg));renderAll()}
+$('connectBtn').onclick=connect;$('startBtn').onclick=async()=>{await connect();state.eventIndex=0;send({type:'order.create',command:`${$('destination').value} 구역으로 조립품 배송 시작`,destination:$('destination').value,parts:['base','top']})};
+$('nextBtn').onclick=()=>{if(state.eventIndex>=mockEvents.length){log('더 이상 보낼 mock 이벤트가 없습니다');return;}send(mockEvents[state.eventIndex++])};
+$('stopBtn').onclick=()=>{state.emergencyStopCount+=1;send({type:'event',event:'safety.hand_detected',payload:{source:'dashboard'}});renderProductivity()};$('unlockBtn').onclick=()=>send({type:'admin.unlock',admin:'operator'});
+$('hwStatusBtn').onclick=()=>send({type:'hardware.status'});$('hwPlanBtn').onclick=()=>send({type:'hardware.pipeline'});$('hwRunBtn').onclick=()=>send({type:'hardware.run_order_plan',destination:$('destination').value,execute:$('executeToggle').checked});$('executeToggle').onchange=renderAll;
+$('resetBtn').onclick=()=>{Object.assign(state,{currentState:null,eventIndex:0,lastSttCommand:'',completedCycles:0,assembledCount:0,deliveryCount:0,emergencyStopCount:0,turtlePose:{x:0,y:0,yaw:0,destination:$('destination').value,status:'대기'}});$('log').innerHTML='';$('operationsTimeline').innerHTML='';renderAll()};
+$('cameraConnectBtn').onclick=()=>{const img=$('cameraFeed');img.src=$('cameraUrl').value;img.style.display='block';$('cameraPlaceholder').style.display='none';$('visionStatus').textContent='STREAM CONNECTING';img.onload=()=>{$('visionStatus').textContent='STREAM LIVE';$('detectionChip').textContent='detections: live'};img.onerror=()=>{$('visionStatus').textContent='STREAM ERROR';$('cameraPlaceholder').style.display='grid';img.style.display='none';$('detectionChip').textContent='detections: unavailable'}};
+renderAll();addTimeline('Dashboard ready','dry-run으로 먼저 확인하세요');
 </script>
 </body>
 </html>
