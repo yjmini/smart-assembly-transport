@@ -27,6 +27,8 @@ class EventType(str, Enum):
     QC_FAILED = "vision.qc_failed"
     LOADED_TO_TURTLEBOT = "dobot.loaded_to_turtlebot"
     DELIVERY_ARRIVED = "turtlebot.delivery_arrived"
+    RETURN_REQUESTED = "turtlebot.return_requested"
+    RETURN_ARRIVED = "turtlebot.return_arrived"
 
 
 @dataclass(frozen=True)

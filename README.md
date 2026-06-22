@@ -81,6 +81,8 @@ python3 -m server.app
 | 11 | [인터페이스 합의서](./docs/11-interfaces.md) | 모듈 간 합의가 필요한 계약 |
 | 12 | [하드웨어 임의값 목록](./docs/12-placeholder-hardware-values.md) | 실측/보정이 필요한 mock 좌표와 설정 |
 | 13 | [로컬 Mock 실행 가이드](./docs/13-local-mock-runbook.md) | 테스트, mock runner, WebSocket 실행 |
+| 14 | [실제 하드웨어 실행 가이드](./docs/14-real-hardware-runbook.md) | 실제 Conveyor/TurtleBot/Dobot dry-run 및 실행 |
+| 15 | [참고 프로젝트 고도화 적용 기준](./docs/15-reference-adaptation.md) | project_pill 참고 패턴 적용 기준 |
 
 ## 개발 원칙
 

@@ -77,7 +77,40 @@ def test_real_pipeline_message_schema_is_dashboard_friendly():
     assert "vision" in encoded
 
 
-def test_real_order_plan_dry_run_covers_full_pipeline_commands_and_states():
+def test_real_pipeline_summary_exposes_demo_phases_and_return_home_target():
+    server = WebSocketMissionServer()
+    payload = server.real_pipeline_summary()
+
+    assert payload["turtlebot"]["home_destination"] == "HOME"
+    assert "HOME" in payload["turtlebot"]["targets"]
+    phases = payload["phases"]
+    phase_ids = [phase["id"] for phase in phases]
+    assert phase_ids == [
+        "order",
+        "conveyor_to_vision_gate",
+        "assembly",
+        "quality_check",
+        "load_to_turtlebot",
+        "delivery",
+        "return_home",
+    ]
+    assert phases[-1]["source_reference"] == "project_pill_return_flow_adapted"
+
+
+def test_turtlebot_command_builder_can_generate_return_home_navigation():
+    config = HardwareConfig.load(DEFAULT_CONFIG_PATH)
+    builder = TurtleBotCommandBuilder(config.turtlebot)
+
+    cmd = builder.return_home_command()
+
+    remote = cmd[-1]
+    assert "export ROS_DOMAIN_ID=34" in remote
+    assert "ros2 action send_goal" in remote
+    assert '"x": 0.0' in remote
+    assert '"y": 0.0' in remote
+
+
+def test_real_order_plan_dry_run_covers_full_pipeline_commands_states_and_return_home():
     config = HardwareConfig.load(DEFAULT_CONFIG_PATH)
     pipeline = RealHardwarePipeline(config, execute=False)
 
@@ -95,9 +128,12 @@ def test_real_order_plan_dry_run_covers_full_pipeline_commands_and_states():
         "LOADING_TO_TURTLEBOT",
         "DELIVERY_NAVIGATING",
         "DELIVERED",
+        "RETURNING_HOME",
+        "RETURNED_HOME",
     ]
     assert "start" in command_actions
     assert "stop" in command_actions
     assert any(action and action.startswith("ptp_step_") for action in command_actions)
     assert "navigate_A" in command_actions
+    assert "return_HOME" in command_actions
     assert all(event.get("executed") is False for event in events if event["type"] == "hardware.command_result")

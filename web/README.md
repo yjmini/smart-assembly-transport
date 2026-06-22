@@ -28,7 +28,7 @@ http://127.0.0.1:3000/web/index.html
 
 1. `WebSocket 연결` 클릭
 2. `작업 시작` 클릭
-3. `다음 mock 이벤트`를 반복 클릭해서 공정이 `DELIVERED`까지 진행되는지 확인
+3. `다음 mock 이벤트`를 반복 클릭해서 공정이 `RETURNED_HOME`까지 진행되는지 확인
 4. 중간에 `손 감지 / 비상정지` 클릭 시 `WAIT_ADMIN_UNLOCK` 상태가 되는지 확인
 5. `관리자 Unlock` 클릭 후 이전 상태로 복구되는지 확인
 

@@ -22,6 +22,8 @@ class MissionState(Enum):
     LOADING_TO_TURTLEBOT = auto()
     DELIVERY_NAVIGATING = auto()
     DELIVERED = auto()
+    RETURNING_HOME = auto()
+    RETURNED_HOME = auto()
     EMERGENCY_STOP = auto()
     WAIT_ADMIN_UNLOCK = auto()
 
@@ -95,6 +97,12 @@ class FactoryFSM:
         elif event_type == EventType.DELIVERY_ARRIVED and self.state == MissionState.DELIVERY_NAVIGATING:
             self.state = MissionState.DELIVERED
             command = "tts.say_complete"
+        elif event_type == EventType.RETURN_REQUESTED and self.state == MissionState.DELIVERED:
+            self.state = MissionState.RETURNING_HOME
+            command = "turtlebot.return_home"
+        elif event_type == EventType.RETURN_ARRIVED and self.state == MissionState.RETURNING_HOME:
+            self.state = MissionState.RETURNED_HOME
+            command = "factory.reset_for_next_order"
         elif event_type == EventType.ADMIN_UNLOCKED and self.state == MissionState.WAIT_ADMIN_UNLOCK:
             self.state = self.previous_active_state or MissionState.IDLE
             command = "factory.resume"

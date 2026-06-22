@@ -15,7 +15,9 @@
 7. 비전이 완성품을 확인한다.
 8. Dobot이 TurtleBot 적재함에 제품을 올린다.
 9. TurtleBot이 A구역으로 이동한다.
-10. TTS와 Dashboard가 배송 완료를 알린다.
+10. TurtleBot이 배송 완료를 보고한다.
+11. TurtleBot이 시작 위치 또는 대기 위치로 복귀한다.
+12. TTS와 Dashboard가 복귀 완료 및 다음 작업 대기 상태를 알린다.
 
 ## 안전 시나리오
 
