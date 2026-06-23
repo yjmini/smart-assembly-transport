@@ -104,6 +104,13 @@ class RealHardwarePipeline:
         transition(EventType.LOADED_TO_TURTLEBOT, {"source": "dobot"})
         outputs.append(self._command_result("turtlebot", f"navigate_{destination}", self.turtlebot.navigate(destination)))
         transition(EventType.DELIVERY_ARRIVED, {"destination": destination, "source": "turtlebot"})
+        outputs.append(
+            self._command_result(
+                "turtlebot",
+                f"wait_{self.config.turtlebot.delivery_dwell_sec:g}s",
+                self.turtlebot.wait_at_destination(self.config.turtlebot.delivery_dwell_sec),
+            )
+        )
         transition(EventType.RETURN_REQUESTED, {"destination": self.config.turtlebot.home_destination, "source": "mission_orchestrator"}, "return home requested")
         outputs.append(self._command_result("turtlebot", f"return_{self.config.turtlebot.home_destination}", self.turtlebot.return_home()))
         transition(EventType.RETURN_ARRIVED, {"destination": self.config.turtlebot.home_destination, "source": "turtlebot"}, "returned home")

@@ -26,10 +26,10 @@ class TurtleBotCommandBuilder:
     def _source_path(path: str) -> str:
         return path if path.startswith("~/") else quote(path)
 
-    def navigate_command(self, destination: str) -> list[str]:
+    def _goal_json(self, destination: str) -> str:
         pose = self.config.pose_for(destination)
         z, w = yaw_to_quaternion_z_w(pose.yaw)
-        goal = json.dumps(
+        return json.dumps(
             {
                 "pose": {
                     "header": {"frame_id": self.config.map_frame},
@@ -40,12 +40,18 @@ class TurtleBotCommandBuilder:
                 }
             }
         )
+
+    def _nav2_goal_command(self, destination: str) -> str:
+        goal = self._goal_json(destination)
+        return f"ros2 action send_goal {quote(self.config.nav_action)} nav2_msgs/action/NavigateToPose {quote(goal)}"
+
+    def _ssh_command(self, remote_steps: list[str]) -> list[str]:
         remote = " && ".join(
             [
                 f"source {self._source_path(self.config.ros_setup)}",
-                f"source {self._source_path(self.config.workspace_setup)} || true",
+                f"(source {self._source_path(self.config.workspace_setup)} || true)",
                 f"export ROS_DOMAIN_ID={self.config.ros_domain_id}",
-                f"ros2 action send_goal {quote(self.config.nav_action)} nav2_msgs/action/NavigateToPose {quote(goal)}",
+                *remote_steps,
             ]
         )
         return [
@@ -59,6 +65,34 @@ class TurtleBotCommandBuilder:
             self.config.target,
             remote,
         ]
+
+    def navigate_command(self, destination: str) -> list[str]:
+        return self._ssh_command([self._nav2_goal_command(destination)])
+
+    def wait_command(self, dwell_sec: float = 3.0) -> list[str]:
+        if dwell_sec < 0:
+            raise ValueError("dwell_sec must be non-negative")
+        return self._ssh_command([f"sleep {quote(format(dwell_sec, 'g'))}"])
+
+    def delivery_round_trip_command(self, destination: str, dwell_sec: float = 3.0) -> list[str]:
+        """Navigate to destination, wait there, then return to configured HOME.
+
+        This command is intended for the post-loading step: once the completed
+        assembly is on the TurtleBot, Nav2 drives to the user-selected map pose,
+        waits for handoff/confirmation, and then drives back to the original
+        HOME pose. `ros2 action send_goal` exits non-zero on failure, so the
+        chained `&&` command does not continue to dwell/return if navigation
+        fails.
+        """
+        if dwell_sec < 0:
+            raise ValueError("dwell_sec must be non-negative")
+        return self._ssh_command(
+            [
+                self._nav2_goal_command(destination),
+                f"sleep {quote(format(dwell_sec, 'g'))}",
+                self._nav2_goal_command(self.config.home_destination),
+            ]
+        )
 
     def status_command(self) -> list[str]:
         remote = " && ".join(
@@ -81,6 +115,12 @@ class RealTurtleBotDelivery:
 
     def navigate(self, destination: str) -> CommandResult:
         return self.runner.run(self.builder.navigate_command(destination))
+
+    def wait_at_destination(self, dwell_sec: float = 3.0) -> CommandResult:
+        return self.runner.run(self.builder.wait_command(dwell_sec))
+
+    def delivery_round_trip(self, destination: str, dwell_sec: float = 3.0) -> CommandResult:
+        return self.runner.run(self.builder.delivery_round_trip_command(destination, dwell_sec))
 
     def return_home(self) -> CommandResult:
         return self.runner.run(self.builder.return_home_command())
