@@ -11,18 +11,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
+import sys
 from typing import Any
 
-try:  # works after `source sem1_pjt_ws/install/setup.bash`
-    from hri_interfaces.events import EventType, make_order, make_state_event
-    from hri_interfaces.hardware_config import HardwareConfig, DEFAULT_CONFIG_PATH
-    from mission_orchestrator.fsm import FactoryFSM
-    from mission_orchestrator.real_pipeline import RealHardwarePipeline
-except ImportError:  # works from repository root without colcon install
-    from sem1_pjt_ws.src.hri_interfaces.hri_interfaces.events import EventType, make_order, make_state_event
-    from sem1_pjt_ws.src.hri_interfaces.hri_interfaces.hardware_config import HardwareConfig, DEFAULT_CONFIG_PATH
-    from sem1_pjt_ws.src.mission_orchestrator.mission_orchestrator.fsm import FactoryFSM
-    from sem1_pjt_ws.src.mission_orchestrator.mission_orchestrator.real_pipeline import RealHardwarePipeline
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+for package_dir in (PROJECT_ROOT / "sem1_pjt_ws" / "src").iterdir():
+    if package_dir.is_dir():
+        sys.path.insert(0, str(package_dir))
+
+from hri_interfaces.events import EventType, make_order, make_state_event
+from hri_interfaces.hardware_config import HardwareConfig, DEFAULT_CONFIG_PATH
+from mission_orchestrator.fsm import FactoryFSM
+from mission_orchestrator.real_pipeline import RealHardwarePipeline
+
+REPO_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "hardware.json"
 
 try:
     import websockets
@@ -33,7 +36,8 @@ except ImportError:  # pragma: no cover
 class WebSocketMissionServer:
     def __init__(self) -> None:
         self.fsm = FactoryFSM()
-        self.hardware_config = HardwareConfig.load(DEFAULT_CONFIG_PATH)
+        config_path = DEFAULT_CONFIG_PATH if Path(DEFAULT_CONFIG_PATH).exists() else REPO_CONFIG_PATH
+        self.hardware_config = HardwareConfig.load(config_path)
         self.pipeline = RealHardwarePipeline(self.hardware_config, execute=False)
 
     def hardware_status_snapshot(self) -> dict[str, Any]:
@@ -42,6 +46,30 @@ class WebSocketMissionServer:
     def real_pipeline_summary(self) -> dict[str, Any]:
         return self.pipeline.pipeline_summary()
 
+    @staticmethod
+    def parse_whisper_command(transcript: str) -> dict[str, Any]:
+        """Map a Whisper transcript into the dashboard/order command schema.
+
+        Safety words intentionally bypass complex parsing so a voice stop command
+        can be surfaced to the FSM immediately.
+        """
+        text = (transcript or "").strip()
+        lowered = text.lower()
+        if any(word in lowered for word in ("정지", "멈춰", "중지", "stop", "emergency")):
+            return {"intent": "emergency_stop", "command": text, "destination": None, "parts": []}
+        destination = "B" if any(token in lowered for token in ("b구역", "b 구역", "비구역", "비 구역", "zone b")) else "A"
+        return {"intent": "create_order", "command": text or f"{destination} 구역으로 조립품 배송 시작", "destination": destination, "parts": ["base", "top"]}
+
+    def handle_whisper_transcript(self, msg: dict[str, Any]) -> dict[str, Any]:
+        transcript = msg.get("transcript") or msg.get("text") or msg.get("command") or ""
+        parsed = self.parse_whisper_command(transcript)
+        if parsed["intent"] == "emergency_stop":
+            result = self.fsm.handle_event(EventType.HAND_DETECTED, {"source": "whisper", "transcript": transcript})
+            return make_state_event(result.state, "handled whisper emergency_stop", {"command": result.command, "speech": parsed, **(result.payload or {})})
+        order = make_order(parsed["command"], parsed["destination"], parsed["parts"])
+        result = self.fsm.handle_event(EventType.ORDER_CREATED, order)
+        return make_state_event(result.state, "handled whisper create_order", {"command": result.command, "speech": parsed, **(result.payload or {})})
+
     async def handle_message(self, raw: str) -> dict[str, Any]:
         msg = json.loads(raw)
         msg_type = msg.get("type")
@@ -49,6 +77,10 @@ class WebSocketMissionServer:
             order = make_order(msg.get("command", "assemble and deliver"), msg.get("destination", "A"), msg.get("parts", ["base", "top"]))
             result = self.fsm.handle_event(EventType.ORDER_CREATED, order)
             return make_state_event(result.state, f"handled {msg_type}", {"command": result.command, **(result.payload or {})})
+        if msg_type in {"speech.stt.final", "whisper.transcript", "whisper.command"}:
+            return self.handle_whisper_transcript(msg)
+        if msg_type == "speech.tts.done":
+            return {"type": "speech.tts.ack", "text": msg.get("text", ""), "voice": msg.get("voice", "whisper-tts"), "status": "done"}
         if msg_type == "event":
             result = self.fsm.handle_event(EventType(msg["event"]), msg.get("payload"))
             return make_state_event(result.state, f"handled {msg_type}", {"command": result.command, **(result.payload or {})})

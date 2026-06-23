@@ -70,7 +70,34 @@ http://127.0.0.1:3000/web/index.html
 
 Dashboard의 `실제 하드웨어 구성 불러오기`와 `실제 파이프라인 계획 보기`는 장비에 명령을 보내지 않습니다. 실제로 실행할 SSH/ROS command를 UI 로그에서 확인할 수 있습니다.
 
-## 5. 실제 실행
+## 5. TurtleBot Nav2 배송 단독 dry-run/실행
+
+조립 완료품이 TurtleBot에 적재된 뒤, 사용자가 지정한 SLAM map 위치로 Nav2 이동 → 3초 정지 → HOME 복귀만 따로 검증할 수 있습니다.
+
+Dry-run으로 실제 전송될 SSH/ROS 명령 확인:
+
+```bash
+cd /home/ssafy/smart-assembly-transport
+python3 -m sem1_pjt_ws.src.turtlebot_delivery.turtlebot_delivery.delivery_round_trip A
+```
+
+실제 실행:
+
+```bash
+cd /home/ssafy/smart-assembly-transport
+python3 -m sem1_pjt_ws.src.turtlebot_delivery.turtlebot_delivery.delivery_round_trip A --execute
+```
+
+`A`, `B`, `HOME` 좌표와 목적지 대기 시간은 `config/hardware.json`의 `turtlebot.targets`, `turtlebot.home_destination`, `turtlebot.delivery_dwell_sec`에서 조정합니다. ROS 2 workspace를 빌드/소스한 환경에서는 console script도 사용할 수 있습니다.
+
+```bash
+cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
+colcon build --packages-select turtlebot_delivery
+source install/setup.bash
+turtlebot-delivery-round-trip A --execute
+```
+
+## 6. 실제 실행
 
 Dashboard에서 `실제 명령 실행 모드`를 켠 뒤 `실제 order plan 실행`을 누르면 SSH 명령이 실제로 전송됩니다. 이 단계 전에 반드시:
 

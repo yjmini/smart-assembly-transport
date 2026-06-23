@@ -42,10 +42,11 @@ class TurtleBotConfig:
     ssh_port: int = 22
     ros_domain_id: int = 34
     ros_setup: str = "/opt/ros/humble/setup.bash"
-    workspace_setup: str = "~/turtlebot4_ws/install/setup.bash"
+    workspace_setup: str = "~/turtlebot3_ws/install/setup.bash"
     nav_action: str = "/navigate_to_pose"
     map_frame: str = "map"
     home_destination: str = "HOME"
+    delivery_dwell_sec: float = 3.0
     targets: dict[str, DeliveryPose] | None = None
     connect_timeout_sec: int = 5
 
@@ -123,6 +124,7 @@ class HardwareConfig:
                 "ssh_port": self.turtlebot.ssh_port,
                 "ros_domain_id": self.turtlebot.ros_domain_id,
                 "home_destination": self.turtlebot.home_destination,
+                "delivery_dwell_sec": self.turtlebot.delivery_dwell_sec,
                 "targets": {k: vars(v) for k, v in (self.turtlebot.targets or {}).items()},
             },
             "dobot": vars(self.dobot),
