@@ -9,7 +9,7 @@ def test_realsense_bridge_exposes_mjpeg_stream_endpoints():
     script = BRIDGE.read_text(encoding="utf-8")
 
     required_snippets = [
-        "sensor_msgs.msg import Image",
+        "sensor_msgs.msg import CompressedImage, Image",
         "QoSProfile",
         "ReliabilityPolicy.RELIABLE",
         "DurabilityPolicy.TRANSIENT_LOCAL",
@@ -19,6 +19,8 @@ def test_realsense_bridge_exposes_mjpeg_stream_endpoints():
         "/snapshot.jpg",
         "/health",
         "cv2.imencode",
+        "cv2.imdecode",
+        "--compressed",
         "rgb8",
         "bgr8",
     ]
@@ -34,6 +36,8 @@ def test_realsense_starter_sources_ros_and_uses_system_python():
         "sem1_pjt_ws/install/setup.bash",
         "exec /usr/bin/python3 scripts/realsense_mjpeg_bridge.py",
         "REALSENSE_COLOR_TOPIC:-/camera/camera/color/image_raw",
+        "REALSENSE_COMPRESSED:-0",
+        "USE_FASTDDS_NO_SHM:-0",
         "ROS_DOMAIN_ID:-34",
         "FASTRTPS_DEFAULT_PROFILES_FILE",
         "config/fastdds_no_shm.xml",
