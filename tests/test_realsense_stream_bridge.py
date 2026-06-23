@@ -10,7 +10,9 @@ def test_realsense_bridge_exposes_mjpeg_stream_endpoints():
 
     required_snippets = [
         "sensor_msgs.msg import Image",
-        "qos_profile_sensor_data",
+        "QoSProfile",
+        "ReliabilityPolicy.RELIABLE",
+        "DurabilityPolicy.TRANSIENT_LOCAL",
         "ThreadingHTTPServer",
         "multipart/x-mixed-replace; boundary=frame",
         "/camera/camera/color/image_raw",
@@ -32,6 +34,9 @@ def test_realsense_starter_sources_ros_and_uses_system_python():
         "sem1_pjt_ws/install/setup.bash",
         "exec /usr/bin/python3 scripts/realsense_mjpeg_bridge.py",
         "REALSENSE_COLOR_TOPIC:-/camera/camera/color/image_raw",
+        "ROS_DOMAIN_ID:-34",
+        "FASTRTPS_DEFAULT_PROFILES_FILE",
+        "config/fastdds_no_shm.xml",
         "REALSENSE_STREAM_PORT:-8080",
     ]
     for snippet in required_snippets:

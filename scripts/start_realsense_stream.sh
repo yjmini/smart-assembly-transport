@@ -3,6 +3,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-34}"
+export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-0}"
+export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$PWD/config/fastdds_no_shm.xml}"
+
 ROS_DISTRO_NAME="${ROS_DISTRO:-humble}"
 ROS_SETUP="/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
 if [ -f "$ROS_SETUP" ]; then

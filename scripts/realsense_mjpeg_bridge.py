@@ -27,7 +27,7 @@ except ImportError as exc:  # pragma: no cover - environment dependent
 
 try:
     import rclpy
-    from rclpy.qos import qos_profile_sensor_data
+    from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
     from sensor_msgs.msg import Image
 except ImportError as exc:  # pragma: no cover - environment dependent
     raise SystemExit(
@@ -130,11 +130,17 @@ class RealsenseMjpegBridge:
         self.jpeg_quality = jpeg_quality
         self.latest = LatestFrame()
         self.node = rclpy.create_node("realsense_mjpeg_bridge")
+        qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self.subscription = self.node.create_subscription(
             Image,
             topic,
             self._on_image,
-            qos_profile_sensor_data,
+            qos,
         )
 
     def _on_image(self, msg: Image) -> None:
