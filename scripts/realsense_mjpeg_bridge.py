@@ -28,7 +28,7 @@ except ImportError as exc:  # pragma: no cover - environment dependent
 try:
     import rclpy
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-    from sensor_msgs.msg import Image
+    from sensor_msgs.msg import CompressedImage, Image
 except ImportError as exc:  # pragma: no cover - environment dependent
     raise SystemExit(
         "Missing ROS 2 Python packages. Run via scripts/start_realsense_stream.sh "
@@ -125,9 +125,10 @@ def image_to_bgr(msg: Image) -> np.ndarray:
 
 
 class RealsenseMjpegBridge:
-    def __init__(self, topic: str, jpeg_quality: int) -> None:
+    def __init__(self, topic: str, jpeg_quality: int, *, compressed: bool = False) -> None:
         self.topic = topic
         self.jpeg_quality = jpeg_quality
+        self.compressed = compressed
         self.latest = LatestFrame()
         self.node = rclpy.create_node("realsense_mjpeg_bridge")
         qos = QoSProfile(
@@ -136,12 +137,20 @@ class RealsenseMjpegBridge:
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
-        self.subscription = self.node.create_subscription(
-            Image,
-            topic,
-            self._on_image,
-            qos,
-        )
+        if compressed:
+            self.subscription = self.node.create_subscription(
+                CompressedImage,
+                topic,
+                self._on_compressed_image,
+                qos,
+            )
+        else:
+            self.subscription = self.node.create_subscription(
+                Image,
+                topic,
+                self._on_image,
+                qos,
+            )
 
     def _on_image(self, msg: Image) -> None:
         try:
@@ -158,6 +167,29 @@ class RealsenseMjpegBridge:
         except Exception as exc:  # pragma: no cover - exercised with live ROS data
             self.latest.set_error(str(exc))
             self.node.get_logger().warning(f"Failed to encode image frame: {exc}")
+
+    def _on_compressed_image(self, msg: CompressedImage) -> None:
+        try:
+            compressed = bytes(msg.data)
+            image = cv2.imdecode(np.frombuffer(compressed, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError(f"Failed to decode compressed image format={msg.format!r}")
+            if "jpeg" in msg.format.lower() or "jpg" in msg.format.lower():
+                jpeg = compressed
+            else:
+                ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality])
+                if not ok:
+                    raise ValueError("cv2.imencode returned false")
+                jpeg = encoded.tobytes()
+            self.latest.update(
+                jpeg=jpeg,
+                width=int(image.shape[1]),
+                height=int(image.shape[0]),
+                encoding=f"compressed:{msg.format}",
+            )
+        except Exception as exc:  # pragma: no cover - exercised with live ROS data
+            self.latest.set_error(str(exc))
+            self.node.get_logger().warning(f"Failed to encode compressed image frame: {exc}")
 
 
 def make_handler(bridge: RealsenseMjpegBridge):
@@ -234,6 +266,7 @@ def make_handler(bridge: RealsenseMjpegBridge):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stream a ROS 2 sensor_msgs/Image topic as MJPEG for the dashboard")
     parser.add_argument("--topic", default="/camera/camera/color/image_raw", help="ROS 2 image topic to subscribe")
+    parser.add_argument("--compressed", action="store_true", help="Subscribe as sensor_msgs/CompressedImage instead of sensor_msgs/Image")
     parser.add_argument("--host", default="127.0.0.1", help="HTTP bind host")
     parser.add_argument("--port", type=int, default=8080, help="HTTP bind port")
     parser.add_argument("--jpeg-quality", type=int, default=80, help="JPEG quality 1-100")
@@ -243,7 +276,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     rclpy.init()
-    bridge = RealsenseMjpegBridge(args.topic, max(1, min(100, args.jpeg_quality)))
+    bridge = RealsenseMjpegBridge(args.topic, max(1, min(100, args.jpeg_quality)), compressed=args.compressed)
     spin_thread = threading.Thread(target=rclpy.spin, args=(bridge.node,), daemon=True)
     spin_thread.start()
 
