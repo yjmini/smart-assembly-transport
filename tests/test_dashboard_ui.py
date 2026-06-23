@@ -98,6 +98,8 @@ def test_dashboard_loads_real_slam_png_and_live_vision_messages():
         "origin:{x:-1.11,y:-3.59",
         "vision.detections",
         "turtlebot.pose",
+        "execute",
+        "STT FINAL · REAL NAV",
         "detectionOverlay",
         "YOLO detection JSON 수신 대기",
     ]

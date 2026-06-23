@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from sem1_pjt_ws.src.hri_interfaces.hri_interfaces.hardware_config import (
@@ -200,3 +201,29 @@ def test_server_maps_whisper_stop_words_to_emergency_stop():
     assert result["type"] == "factory.state"
     assert result["state"] == "WAIT_ADMIN_UNLOCK"
     assert result["payload"]["speech"]["intent"] == "emergency_stop"
+
+
+def test_server_can_dry_run_direct_turtlebot_navigation_from_stt():
+    server = WebSocketMissionServer()
+
+    result = server.navigate_turtlebot_from_speech(
+        {"intent": "create_order", "command": "B구역으로 가", "destination": "B", "parts": []},
+        "B구역으로 가",
+        execute=False,
+    )
+
+    assert [event["type"] for event in result] == ["speech.stt.final", "factory.state", "hardware.command_result"]
+    assert result[1]["state"] == "DELIVERY_NAVIGATING"
+    assert result[2]["subsystem"] == "turtlebot"
+    assert result[2]["action"] == "navigate_B"
+    assert result[2]["executed"] is False
+    assert "ros2 action send_goal" in result[2]["command"][-1]
+
+
+def test_server_passthroughs_turtlebot_pose_messages_for_dashboard_broadcast():
+    server = WebSocketMissionServer()
+    payload = {"type": "turtlebot.pose", "pose": {"x": 0.1, "y": -0.2, "yaw": 1.57}, "status": "실시간 pose 수신"}
+
+    result = asyncio.run(server.handle_message(json.dumps(payload, ensure_ascii=False)))
+
+    assert result == payload

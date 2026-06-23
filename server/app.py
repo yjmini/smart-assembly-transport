@@ -10,6 +10,7 @@ messages only after the conveyor Pi and TurtleBot are reachable and safe.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 import json
 from pathlib import Path
 import sys
@@ -39,6 +40,7 @@ class WebSocketMissionServer:
         config_path = DEFAULT_CONFIG_PATH if Path(DEFAULT_CONFIG_PATH).exists() else REPO_CONFIG_PATH
         self.hardware_config = HardwareConfig.load(config_path)
         self.pipeline = RealHardwarePipeline(self.hardware_config, execute=False)
+        self.clients: set[Any] = set()
 
     def hardware_status_snapshot(self) -> dict[str, Any]:
         return self.pipeline.status_snapshot()
@@ -60,17 +62,56 @@ class WebSocketMissionServer:
         destination = "B" if any(token in lowered for token in ("b구역", "b 구역", "비구역", "비 구역", "zone b")) else "A"
         return {"intent": "create_order", "command": text or f"{destination} 구역으로 조립품 배송 시작", "destination": destination, "parts": ["base", "top"]}
 
-    def handle_whisper_transcript(self, msg: dict[str, Any]) -> dict[str, Any]:
+    def handle_whisper_transcript(self, msg: dict[str, Any]) -> dict[str, Any] | list[dict[str, Any]]:
         transcript = msg.get("transcript") or msg.get("text") or msg.get("command") or ""
         parsed = self.parse_whisper_command(transcript)
         if parsed["intent"] == "emergency_stop":
             result = self.fsm.handle_event(EventType.HAND_DETECTED, {"source": "whisper", "transcript": transcript})
             return make_state_event(result.state, "handled whisper emergency_stop", {"command": result.command, "speech": parsed, **(result.payload or {})})
+        if msg.get("execute"):
+            return self.navigate_turtlebot_from_speech(parsed, transcript, execute=True)
         order = make_order(parsed["command"], parsed["destination"], parsed["parts"])
         result = self.fsm.handle_event(EventType.ORDER_CREATED, order)
         return make_state_event(result.state, "handled whisper create_order", {"command": result.command, "speech": parsed, **(result.payload or {})})
 
-    async def handle_message(self, raw: str) -> dict[str, Any]:
+    def navigate_turtlebot_from_speech(self, parsed: dict[str, Any], transcript: str, *, execute: bool) -> list[dict[str, Any]]:
+        """Execute a direct Nav2 delivery command from a final STT transcript.
+
+        This intentionally moves only the TurtleBot, not the full conveyor/Dobot
+        pipeline, so an operator can say "A/B 구역으로 가" and watch the live
+        pose arrow move on the dashboard.
+        """
+        destination = parsed.get("destination") or "A"
+        pipeline = RealHardwarePipeline(self.hardware_config, execute=execute)
+        result = pipeline.turtlebot.navigate(destination)
+        target = self.hardware_config.turtlebot.pose_for(destination)
+        return [
+            {
+                "type": "speech.stt.final",
+                "transcript": transcript,
+                "execute": execute,
+                "speech": parsed,
+            },
+            {
+                "type": "factory.state",
+                "state": "DELIVERY_NAVIGATING",
+                "message": "STT requested direct TurtleBot navigation",
+                "payload": {"speech": parsed, "destination": destination, "command": transcript},
+            },
+            {
+                "type": "hardware.command_result",
+                "subsystem": "turtlebot",
+                "action": f"navigate_{destination}",
+                "destination": destination,
+                "target_pose": {"x": target.x, "y": target.y, "yaw": target.yaw},
+                **asdict(result),
+            },
+        ]
+
+    def passthrough_broadcast(self, msg: dict[str, Any]) -> dict[str, Any]:
+        return msg
+
+    async def handle_message(self, raw: str) -> dict[str, Any] | list[dict[str, Any]]:
         msg = json.loads(raw)
         msg_type = msg.get("type")
         if msg_type == "order.create":
@@ -79,6 +120,11 @@ class WebSocketMissionServer:
             return make_state_event(result.state, f"handled {msg_type}", {"command": result.command, **(result.payload or {})})
         if msg_type in {"speech.stt.final", "whisper.transcript", "whisper.command"}:
             return self.handle_whisper_transcript(msg)
+        if msg_type == "turtlebot.navigate":
+            parsed = {"intent": "create_order", "command": msg.get("command", "dashboard navigate"), "destination": msg.get("destination", "A"), "parts": []}
+            return self.navigate_turtlebot_from_speech(parsed, parsed["command"], execute=bool(msg.get("execute", False)))
+        if msg_type in {"turtlebot.pose", "nav.pose", "vision.detections", "vision.detection", "speech.stt.partial"}:
+            return self.passthrough_broadcast(msg)
         if msg_type == "speech.tts.done":
             return {"type": "speech.tts.ack", "text": msg.get("text", ""), "voice": msg.get("voice", "whisper-tts"), "status": "done"}
         if msg_type == "event":
@@ -97,13 +143,32 @@ class WebSocketMissionServer:
             return {"type": "hardware.run_order_plan.result", "execute": execute, "events": pipeline.run_order_plan(msg.get("destination", "A"))}
         raise ValueError(f"Unsupported message type: {msg_type}")
 
-    async def websocket_handler(self, websocket):
-        async for raw in websocket:
+    async def broadcast(self, payload: dict[str, Any]) -> None:
+        if not self.clients:
+            return
+        encoded = json.dumps(payload, ensure_ascii=False)
+        stale = []
+        for client in list(self.clients):
             try:
-                response = await self.handle_message(raw)
-            except Exception as exc:  # noqa: BLE001 - surface to local dashboard
-                response = {"type": "factory.error", "message": str(exc)}
-            await websocket.send(json.dumps(response, ensure_ascii=False))
+                await client.send(encoded)
+            except Exception:
+                stale.append(client)
+        for client in stale:
+            self.clients.discard(client)
+
+    async def websocket_handler(self, websocket):
+        self.clients.add(websocket)
+        try:
+            async for raw in websocket:
+                try:
+                    response = await self.handle_message(raw)
+                    responses = response if isinstance(response, list) else [response]
+                except Exception as exc:  # noqa: BLE001 - surface to local dashboard
+                    responses = [{"type": "factory.error", "message": str(exc)}]
+                for payload in responses:
+                    await self.broadcast(payload)
+        finally:
+            self.clients.discard(websocket)
 
 
 async def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
