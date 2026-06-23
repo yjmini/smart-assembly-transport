@@ -42,7 +42,7 @@ class TurtleBotConfig:
     ssh_port: int = 22
     ros_domain_id: int = 34
     ros_setup: str = "/opt/ros/humble/setup.bash"
-    workspace_setup: str = "~/turtlebot4_ws/install/setup.bash"
+    workspace_setup: str = "~/turtlebot3_ws/install/setup.bash"
     nav_action: str = "/navigate_to_pose"
     map_frame: str = "map"
     home_destination: str = "HOME"

@@ -30,15 +30,15 @@
     "ssh_port": 22,
     "ros_domain_id": 34,
     "ros_setup": "/opt/ros/humble/setup.bash",
-    "workspace_setup": "~/turtlebot4_ws/install/setup.bash",
+    "workspace_setup": "~/turtlebot3_ws/install/setup.bash",
     "nav_action": "/navigate_to_pose",
     "map_frame": "map",
     "home_destination": "HOME",
     "delivery_dwell_sec": 3.0,
     "targets": {
-      "HOME": {"x": 0.0, "y": 0.0, "yaw": 0.0},
-      "A": {"x": 1.2, "y": 0.0, "yaw": 0.0},
-      "B": {"x": 0.0, "y": 1.2, "yaw": 1.5708}
+      "HOME": {"x": 0.057, "y": -0.0714, "yaw": 0.0},
+      "A": {"x": 0.718, "y": -1.33, "yaw": 0.0},
+      "B": {"x": -0.0704, "y": -1.32, "yaw": 0.0}
     },
     "connect_timeout_sec": 5
   },

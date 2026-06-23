@@ -50,3 +50,29 @@
 | TTS 출력 실패 | Dashboard 알림으로 대체 |
 | 자연어 파싱 실패 | 목적지 선택 UI로 대체 |
 | 마이크 노이즈 | push-to-talk 또는 고정 명령어 사용 |
+
+
+## Dashboard WebSocket 연동
+
+Whisper STT 노드나 테스트 UI는 최종 인식 결과를 아래 형태로 보낸다.
+
+```json
+{
+  "type": "speech.stt.final",
+  "transcript": "B구역으로 조립품 배송 시작"
+}
+```
+
+Dashboard/server는 transcript에서 목적지 A/B와 안전 명령을 파싱한다. `정지`, `멈춰`, `중지`, `stop`, `emergency` 키워드는 즉시 `emergency_stop`으로 매핑한다.
+
+TTS 노드는 안내 시작/완료 상태를 아래 형태로 보낼 수 있다.
+
+```json
+{
+  "type": "speech.tts.done",
+  "text": "B구역 배송을 완료했습니다.",
+  "voice": "ko"
+}
+```
+
+UI는 작업 접수, 비상정지, 배송 완료, TurtleBot 복귀 완료 상태에서 안내 문장을 패널에 표시하고 브라우저 TTS로도 재생한다.

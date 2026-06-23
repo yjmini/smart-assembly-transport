@@ -61,7 +61,7 @@ def test_turtlebot_command_builder_sets_ros_domain_id_34_and_goal_pose():
     assert "turtlebot4@192.168.110.174" in cmd
     remote = cmd[-1]
     assert "export ROS_DOMAIN_ID=34" in remote
-    assert "source ~/turtlebot4_ws/install/setup.bash" in remote
+    assert "source ~/turtlebot3_ws/install/setup.bash" in remote
     assert "ros2 action send_goal" in remote
     assert "/navigate_to_pose" in remote
     assert "position" in remote
@@ -119,8 +119,8 @@ def test_turtlebot_command_builder_can_generate_return_home_navigation():
     remote = cmd[-1]
     assert "export ROS_DOMAIN_ID=34" in remote
     assert "ros2 action send_goal" in remote
-    assert '"x": 0.0' in remote
-    assert '"y": 0.0' in remote
+    assert '"x": 0.057' in remote
+    assert '"y": -0.0714' in remote
 
 
 def test_turtlebot_command_builder_generates_nav2_dwell_return_round_trip():
@@ -134,8 +134,8 @@ def test_turtlebot_command_builder_generates_nav2_dwell_return_round_trip():
     assert "export ROS_DOMAIN_ID=34" in remote
     assert remote.count("ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose") == 2
     assert "sleep 3" in remote
-    assert '"x": 0.0' in remote  # HOME return pose
-    assert '"y": 1.2' in remote  # B destination pose
+    assert '"x": 0.057' in remote  # HOME return pose
+    assert '"y": -1.32' in remote  # B destination pose
 
 
 def test_turtlebot_delivery_round_trip_cli_dry_run_outputs_three_steps():
@@ -178,3 +178,25 @@ def test_real_order_plan_dry_run_covers_full_pipeline_commands_states_and_return
     assert "wait_3s" in command_actions
     assert "return_HOME" in command_actions
     assert all(event.get("executed") is False for event in events if event["type"] == "hardware.command_result")
+
+
+def test_server_maps_whisper_stt_transcript_to_order_create():
+    server = WebSocketMissionServer()
+
+    result = server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "B구역으로 조립품 배송 시작"})
+
+    assert result["type"] == "factory.state"
+    assert result["state"] == "ORDER_RECEIVED"
+    assert result["payload"]["speech"]["intent"] == "create_order"
+    assert result["payload"]["speech"]["destination"] == "B"
+
+
+def test_server_maps_whisper_stop_words_to_emergency_stop():
+    server = WebSocketMissionServer()
+    server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "A구역으로 조립품 배송 시작"})
+
+    result = server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "멈춰"})
+
+    assert result["type"] == "factory.state"
+    assert result["state"] == "WAIT_ADMIN_UNLOCK"
+    assert result["payload"]["speech"]["intent"] == "emergency_stop"
