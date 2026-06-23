@@ -11,17 +11,24 @@ cd /home/ssafy/smart-assembly-transport
 python3 -m server.app
 ```
 
-터미널 2:
+터미널 2 — RealSense MJPEG 브릿지:
 
 ```bash
 cd /home/ssafy/smart-assembly-transport
-python3 -m http.server 3000
+scripts/start_realsense_stream.sh
+```
+
+터미널 3:
+
+```bash
+cd /home/ssafy/smart-assembly-transport
+python3 -m http.server 3001
 ```
 
 브라우저에서 접속:
 
 ```text
-http://127.0.0.1:3000/web/index.html
+http://127.0.0.1:3001/web/index.html
 ```
 
 ## 확인 순서
@@ -35,7 +42,7 @@ http://127.0.0.1:3000/web/index.html
 
 ## 운영 화면 구성
 
-- `RealSense D435i · YOLO 실시간 화면`: MJPEG/HTTP stream URL을 넣고 `카메라 스트림 연결`을 누르면 화면에 표시합니다. `vision.detections` 또는 `vision.detection` WebSocket 메시지를 받으면 bounding box와 객체 목록을 실시간 오버레이합니다.
+- `RealSense D435i · YOLO 실시간 화면`: `scripts/start_realsense_stream.sh`가 `/camera/camera/color/image_raw`를 `http://127.0.0.1:8080/stream?topic=/camera/camera/color/image_raw` MJPEG로 브릿지합니다. 대시보드는 기본으로 이 URL을 자동 연결하고, `vision.detections` 또는 `vision.detection` WebSocket 메시지를 받으면 bounding box와 객체 목록을 실시간 오버레이합니다.
 - `SLAM / TurtleBot 위치`: `map/pjt_map.pgm`에서 만든 지도 중 사용자가 직접 잘라낸 `map/pjt_map_view_crop.png`를 기본으로 로드합니다. 이 이미지는 지도 영역만 최대한 남긴 dashboard용 지도이며, 하늘색 화살표는 TurtleBot 현재 pose, 초록색 원은 HOME, 빨간색 A 원/파란색 B 원은 사용자가 지정한 배송 목적지를 표시합니다. 다른 PNG 지도를 쓰려면 지도 URL 입력칸을 바꾸고 `SLAM 지도 로드`를 누르세요.
 - `전체 진행상황`: 조립·검사·적재·배송·복귀 단계별 상태를 표시합니다.
 - `STT 명령 확인`: Whisper STT transcript를 UI에 표시하고, 최종 인식 문장을 `speech.stt.final` / `whisper.transcript` 이벤트로 받아 작업 시작 또는 비상정지 명령에 반영합니다.
