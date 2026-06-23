@@ -85,6 +85,9 @@ def test_dashboard_loads_real_slam_png_and_live_vision_messages():
     required_snippets = [
         "../map/pjt_map_view_crop.png",
         "viewCrop:{x:7,y:12,w:41,h:28}",
+        "displayTargets:{HOME:{pixel:{x:8,y:20}",
+        "A:{pixel:{x:34.5,y:5},color:'#ef4444'",
+        "B:{pixel:{x:34.5,y:20.5},color:'#3b82f6'",
         "rotation:'ccw'",
         "fit:'cover'",
         "resolution:0.05",
