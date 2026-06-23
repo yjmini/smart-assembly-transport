@@ -67,6 +67,7 @@ def test_dashboard_tracks_stt_command_pose_and_productivity_in_javascript():
         "renderSttCommand",
         "renderFlowOverview",
         "renderVisionDetections",
+        "connectCameraStream",
         "loadSlamMap",
         "mapWorldToPixel",
         "parseWhisperIntent",
