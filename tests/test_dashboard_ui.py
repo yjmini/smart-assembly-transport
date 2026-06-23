@@ -83,7 +83,8 @@ def test_dashboard_loads_real_slam_png_and_live_vision_messages():
     html = DASHBOARD_HTML.read_text(encoding="utf-8")
 
     required_snippets = [
-        "../map/pjt_map_view.png",
+        "../map/pjt_map_view_crop.png",
+        "viewCrop:{x:7,y:12,w:41,h:28}",
         "rotation:'ccw'",
         "fit:'cover'",
         "resolution:0.05",
@@ -96,7 +97,7 @@ def test_dashboard_loads_real_slam_png_and_live_vision_messages():
     for snippet in required_snippets:
         assert snippet in html
 
-    slam_png = DASHBOARD_HTML.parents[1] / "map" / "pjt_map_view.png"
+    slam_png = DASHBOARD_HTML.parents[1] / "map" / "pjt_map_view_crop.png"
     assert slam_png.exists()
     assert slam_png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
