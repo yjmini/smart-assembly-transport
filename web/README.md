@@ -36,7 +36,7 @@ http://127.0.0.1:3000/web/index.html
 ## 운영 화면 구성
 
 - `RealSense D435i · YOLO 실시간 화면`: MJPEG/HTTP stream URL을 넣고 `카메라 스트림 연결`을 누르면 화면에 표시합니다. `vision.detections` 또는 `vision.detection` WebSocket 메시지를 받으면 bounding box와 객체 목록을 실시간 오버레이합니다.
-- `SLAM / TurtleBot 위치`: `map/pjt_map.pgm`을 변환한 `map/pjt_map.png`를 기본으로 로드하고, HOME/A/B 목표점과 TurtleBot 현재 pose를 실제 map 좌표계(origin `[-1.11,-3.59]`, resolution `0.05`) 위에 표시합니다. 다른 PNG 지도를 쓰려면 지도 URL 입력칸을 바꾸고 `SLAM 지도 로드`를 누르세요.
+- `SLAM / TurtleBot 위치`: `map/pjt_map.pgm`을 변환한 `map/pjt_map_view.png`를 기본으로 로드합니다. 이 이미지는 실제 SLAM 영역만 crop한 뒤 왼쪽으로 90도 회전한 dashboard용 지도이며, HOME/A/B 목표점과 TurtleBot 현재 pose를 실제 map 좌표계(origin `[-1.11,-3.59]`, resolution `0.05`) 위에 표시합니다. 다른 PNG 지도를 쓰려면 지도 URL 입력칸을 바꾸고 `SLAM 지도 로드`를 누르세요.
 - `전체 진행상황`: 조립·검사·적재·배송·복귀 단계별 상태를 표시합니다.
 - `STT 명령 확인`: Whisper STT transcript를 UI에 표시하고, 최종 인식 문장을 `speech.stt.final` / `whisper.transcript` 이벤트로 받아 작업 시작 또는 비상정지 명령에 반영합니다.
 - `TTS 안내`: 작업 접수, 비상정지, 배송 완료, 복귀 완료 시 안내 문장을 UI에 표시하고 브라우저 TTS로 재생합니다. 외부 TTS 노드는 `speech.tts.speaking`, `speech.tts.done` 이벤트를 보내 같은 패널 상태를 갱신할 수 있습니다.
