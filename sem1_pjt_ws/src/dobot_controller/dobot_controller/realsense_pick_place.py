@@ -102,8 +102,11 @@ class PickPlaceConfig:
                 (0.0, 0.0, 0.0, 1.0),
             ),
             safe_z_mm=70.0,
-            pick_z_mm=-39.0,
-            conveyor_pose_mm=Pose4D(48.2, 196.3, 17.8, 0.0),
+            # 2026-06 hardware calibration: first YOLO/Dobot smoke test was
+            # about 8 mm too high to reliably pick and release the parts, so
+            # lower both the pickup Z and conveyor placement Z by 8 mm.
+            pick_z_mm=-47.0,
+            conveyor_pose_mm=Pose4D(48.2, 196.3, 9.8, 0.0),
             conveyor_retreat_z_mm=70.0,
             object_place_spacing_y_mm=28.0,
             motion_r=0.0,

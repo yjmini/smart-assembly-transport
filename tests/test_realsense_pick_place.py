@@ -60,6 +60,13 @@ def test_project_pill_reference_transform_maps_camera_point_to_robot_xy():
     assert y == pytest.approx(-7.593, abs=0.01)
 
 
+def test_reference_pick_and_place_z_values_are_lowered_for_hardware_smoke_test():
+    config = PickPlaceConfig.reference_from_project_pill()
+
+    assert config.pick_z_mm == pytest.approx(-47.0)
+    assert config.conveyor_pose_mm.z == pytest.approx(9.8)
+
+
 def test_pick_place_plan_requires_exactly_two_objects():
     config = PickPlaceConfig.reference_from_project_pill()
 

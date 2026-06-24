@@ -242,12 +242,14 @@ quality_result:=abnormal → 오른쪽 분류(sort-right)
 
 ## 8. 현재 기준 좌표/보정값
 
-`project_pill`의 동작 코드에서 가져온 초기값입니다.
+`project_pill`의 동작 코드에서 가져온 뒤, 실제 YOLO/Dobot 테스트에서
+흡착/놓기 높이가 약 8mm 높게 잡혀 물체를 안정적으로 잡지 못한 피드백을
+반영해 `pick_z_mm`와 컨베이어 place Z를 각각 8mm 낮춘 값입니다.
 
 ```text
 safe_z_mm = 70.0
-pick_z_mm = -39.0
-conveyor_place_pose = x=48.2, y=196.3, z=17.8, r=0.0
+pick_z_mm = -47.0
+conveyor_place_pose = x=48.2, y=196.3, z=9.8, r=0.0
 object_place_spacing_y_mm = 28.0
 ```
 
@@ -287,6 +289,6 @@ COMPLETED_TWO_OBJECT_PICK_PLACE
 
 - Dobot workspace 안에 손을 넣지 마세요.
 - 첫 테스트는 suction/높이 보정값을 보수적으로 잡고 진행하세요.
-- `pick_z_mm=-39.0`은 reference 값이므로 실제 물체 높이에 맞게 조정해야 할 수 있습니다.
+- `pick_z_mm=-47.0`, `conveyor_place_pose.z=9.8`은 첫 하드웨어 테스트 후 8mm 낮춘 값입니다. 너무 낮아 끌리면 1~2mm씩 다시 올려 조정하세요.
 - 컨베이어는 두 번째 물체를 놓은 뒤 한 번만 start됩니다.
 - 비상 상황에서는 Conveyor Pi emergency-stop과 Dobot E-stop을 우선 사용하세요.
