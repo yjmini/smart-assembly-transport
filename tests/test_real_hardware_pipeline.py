@@ -28,6 +28,7 @@ def test_default_hardware_config_uses_project_device_addresses():
     assert config.conveyor.host == "192.168.110.142"
     assert config.turtlebot.ssh_user == "turtlebot4"
     assert config.turtlebot.host == "192.168.110.174"
+    assert config.turtlebot.command_mode == "local"
     assert config.turtlebot.ros_domain_id == 34
     assert config.turtlebot.delivery_dwell_sec == 3.0
     assert config.mode == "real"
@@ -59,13 +60,18 @@ def test_turtlebot_command_builder_sets_ros_domain_id_34_and_goal_pose():
 
     cmd = builder.navigate_command("A")
 
-    assert "turtlebot4@192.168.110.174" in cmd
-    remote = cmd[-1]
-    assert "export ROS_DOMAIN_ID=34" in remote
-    assert "source ~/turtlebot3_ws/install/setup.bash" in remote
-    assert "ros2 action send_goal" in remote
-    assert "/navigate_to_pose" in remote
-    assert "position" in remote
+    assert cmd[:2] == ["bash", "-lc"]
+    local = cmd[-1]
+    assert "export ROS_DOMAIN_ID=34" in local
+    assert "source ~/turtlebot3_ws/install/setup.bash" in local
+    assert "ros2 action send_goal" in local
+    assert "/navigate_to_pose" in local
+    assert "position" in local
+    assert '\"stamp\": {\"sec\": 0, \"nanosec\": 0}' in local
+    assert config.turtlebot.pose_for("A").yaw == -1.5708
+    assert config.turtlebot.pose_for("B").yaw == -1.5708
+    assert '\"z\": -0.707' in local
+    assert '\"w\": 0.707' in local
 
 
 def test_server_can_report_real_hardware_status_without_connecting_to_devices():
@@ -75,6 +81,7 @@ def test_server_can_report_real_hardware_status_without_connecting_to_devices():
     assert status["mode"] == "real"
     assert status["conveyor"]["target"] == "ssafy@192.168.110.142"
     assert status["turtlebot"]["target"] == "turtlebot4@192.168.110.174"
+    assert status["turtlebot"]["command_mode"] == "local"
     assert status["turtlebot"]["ros_domain_id"] == 34
 
 
@@ -131,7 +138,7 @@ def test_turtlebot_command_builder_generates_nav2_dwell_return_round_trip():
     cmd = builder.delivery_round_trip_command("B", dwell_sec=3.0)
     remote = cmd[-1]
 
-    assert "turtlebot4@192.168.110.174" in cmd
+    assert cmd[:2] == ["bash", "-lc"]
     assert "export ROS_DOMAIN_ID=34" in remote
     assert remote.count("ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose") == 2
     assert "sleep 3" in remote
@@ -181,15 +188,48 @@ def test_real_order_plan_dry_run_covers_full_pipeline_commands_states_and_return
     assert all(event.get("executed") is False for event in events if event["type"] == "hardware.command_result")
 
 
-def test_server_maps_whisper_stt_transcript_to_order_create():
+def test_server_maps_whisper_stt_transcript_to_turtlebot_navigation_dry_run():
     server = WebSocketMissionServer()
 
     result = server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "B구역으로 조립품 배송 시작"})
 
-    assert result["type"] == "factory.state"
-    assert result["state"] == "ORDER_RECEIVED"
-    assert result["payload"]["speech"]["intent"] == "create_order"
-    assert result["payload"]["speech"]["destination"] == "B"
+    assert [event["type"] for event in result] == ["speech.stt.final", "factory.state", "hardware.command_result"]
+    assert result[0]["execute"] is False
+    assert result[1]["state"] == "DELIVERY_NAVIGATING"
+    assert result[1]["payload"]["speech"]["intent"] == "create_order"
+    assert result[1]["payload"]["speech"]["destination"] == "B"
+    assert result[2]["subsystem"] == "turtlebot"
+    assert result[2]["action"] == "navigate_B"
+    assert result[2]["executed"] is False
+
+
+def test_server_maps_home_stt_transcript_to_home_navigation_dry_run():
+    server = WebSocketMissionServer()
+
+    result = server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "홈 위치로 이동"})
+
+    assert isinstance(result, list)
+    assert [event["type"] for event in result] == ["speech.stt.final", "factory.state", "hardware.command_result"]
+    assert result[1]["state"] == "DELIVERY_NAVIGATING"
+    assert result[1]["payload"]["speech"]["destination"] == "HOME"
+    assert result[1]["payload"]["speech"]["parts"] == []
+    assert result[2]["subsystem"] == "turtlebot"
+    assert result[2]["action"] == "navigate_HOME"
+    assert result[2]["destination"] == "HOME"
+    assert result[2]["target_pose"] == {"x": 0.057, "y": -0.0714, "yaw": 0.0}
+    assert result[2]["executed"] is False
+
+
+def test_whisper_stt_navigation_does_not_reenter_order_fsm_while_already_navigating():
+    server = WebSocketMissionServer()
+    server.fsm.state = type(server.fsm.state).DELIVERY_NAVIGATING
+
+    result = asyncio.run(server.handle_message(json.dumps({"type": "speech.stt.final", "transcript": "B구역으로 조립품 배송 시작"}, ensure_ascii=False)))
+
+    assert result[0]["type"] == "speech.stt.final"
+    assert result[1]["type"] == "factory.state"
+    assert result[1]["state"] == "DELIVERY_NAVIGATING"
+    assert result[2]["action"] == "navigate_B"
 
 
 def test_server_maps_whisper_stop_words_to_emergency_stop():

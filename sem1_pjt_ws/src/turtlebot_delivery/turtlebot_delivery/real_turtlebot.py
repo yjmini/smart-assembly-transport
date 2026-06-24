@@ -32,7 +32,11 @@ class TurtleBotCommandBuilder:
         return json.dumps(
             {
                 "pose": {
-                    "header": {"frame_id": self.config.map_frame},
+                    # Use an explicit zero stamp so Nav2/tf2 transforms the goal
+                    # with the latest available map->base transform.  A wall-clock
+                    # stamp can age out of the TF buffer during long navigation and
+                    # trigger "extrapolation into the past" near the goal.
+                    "header": {"stamp": {"sec": 0, "nanosec": 0}, "frame_id": self.config.map_frame},
                     "pose": {
                         "position": {"x": pose.x, "y": pose.y, "z": 0.0},
                         "orientation": {"z": z, "w": w},
@@ -66,13 +70,36 @@ class TurtleBotCommandBuilder:
             remote,
         ]
 
+    def _local_command(self, local_steps: list[str]) -> list[str]:
+        """Build a local ROS command for the operator PC that runs Nav2.
+
+        In the lab runbook, `navigation2.launch.py` is started on this PC, not
+        inside the TurtleBot SSH environment.  The TurtleBot host may not have
+        `nav2_msgs` installed, so Nav2 action goals must be sent from the same
+        ROS environment where `/navigate_to_pose` is visible.
+        """
+        command = " && ".join(
+            [
+                f"source {self._source_path(self.config.ros_setup)}",
+                f"([ -f {self._source_path(self.config.workspace_setup)} ] && source {self._source_path(self.config.workspace_setup)} || true)",
+                f"export ROS_DOMAIN_ID={self.config.ros_domain_id}",
+                *local_steps,
+            ]
+        )
+        return ["bash", "-lc", command]
+
+    def _command(self, steps: list[str]) -> list[str]:
+        if self.config.command_mode == "local":
+            return self._local_command(steps)
+        return self._ssh_command(steps)
+
     def navigate_command(self, destination: str) -> list[str]:
-        return self._ssh_command([self._nav2_goal_command(destination)])
+        return self._command([self._nav2_goal_command(destination)])
 
     def wait_command(self, dwell_sec: float = 3.0) -> list[str]:
         if dwell_sec < 0:
             raise ValueError("dwell_sec must be non-negative")
-        return self._ssh_command([f"sleep {quote(format(dwell_sec, 'g'))}"])
+        return self._command([f"sleep {quote(format(dwell_sec, 'g'))}"])
 
     def delivery_round_trip_command(self, destination: str, dwell_sec: float = 3.0) -> list[str]:
         """Navigate to destination, wait there, then return to configured HOME.
@@ -86,7 +113,7 @@ class TurtleBotCommandBuilder:
         """
         if dwell_sec < 0:
             raise ValueError("dwell_sec must be non-negative")
-        return self._ssh_command(
+        return self._command(
             [
                 self._nav2_goal_command(destination),
                 f"sleep {quote(format(dwell_sec, 'g'))}",

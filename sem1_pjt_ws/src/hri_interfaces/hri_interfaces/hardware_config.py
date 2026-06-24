@@ -39,6 +39,7 @@ class DeliveryPose:
 class TurtleBotConfig:
     ssh_user: str
     host: str
+    command_mode: str = "ssh"
     ssh_port: int = 22
     ros_domain_id: int = 34
     ros_setup: str = "/opt/ros/humble/setup.bash"
@@ -121,6 +122,7 @@ class HardwareConfig:
             "turtlebot": {
                 "target": self.turtlebot.target,
                 "host": self.turtlebot.host,
+                "command_mode": self.turtlebot.command_mode,
                 "ssh_port": self.turtlebot.ssh_port,
                 "ros_domain_id": self.turtlebot.ros_domain_id,
                 "home_destination": self.turtlebot.home_destination,

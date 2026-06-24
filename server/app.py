@@ -59,20 +59,19 @@ class WebSocketMissionServer:
         lowered = text.lower()
         if any(word in lowered for word in ("정지", "멈춰", "중지", "stop", "emergency")):
             return {"intent": "emergency_stop", "command": text, "destination": None, "parts": []}
-        destination = "B" if any(token in lowered for token in ("b구역", "b 구역", "비구역", "비 구역", "zone b")) else "A"
-        return {"intent": "create_order", "command": text or f"{destination} 구역으로 조립품 배송 시작", "destination": destination, "parts": ["base", "top"]}
+        destination = "HOME" if any(token in lowered for token in ("home", "홈", "복귀", "시작 위치", "원래 위치", "처음 위치", "제자리")) else "B" if any(token in lowered for token in ("b구역", "b 구역", "비구역", "비 구역", "zone b")) else "A"
+        parts = [] if destination == "HOME" else ["base", "top"]
+        return {"intent": "create_order", "command": text or f"{destination} 구역으로 조립품 배송 시작", "destination": destination, "parts": parts}
 
     def handle_whisper_transcript(self, msg: dict[str, Any]) -> dict[str, Any] | list[dict[str, Any]]:
         transcript = msg.get("transcript") or msg.get("text") or msg.get("command") or ""
         parsed = self.parse_whisper_command(transcript)
+        if msg.get("destination"):
+            parsed["destination"] = str(msg["destination"]).upper()
         if parsed["intent"] == "emergency_stop":
             result = self.fsm.handle_event(EventType.HAND_DETECTED, {"source": "whisper", "transcript": transcript})
             return make_state_event(result.state, "handled whisper emergency_stop", {"command": result.command, "speech": parsed, **(result.payload or {})})
-        if msg.get("execute"):
-            return self.navigate_turtlebot_from_speech(parsed, transcript, execute=True)
-        order = make_order(parsed["command"], parsed["destination"], parsed["parts"])
-        result = self.fsm.handle_event(EventType.ORDER_CREATED, order)
-        return make_state_event(result.state, "handled whisper create_order", {"command": result.command, "speech": parsed, **(result.payload or {})})
+        return self.navigate_turtlebot_from_speech(parsed, transcript, execute=bool(msg.get("execute", False)))
 
     def navigate_turtlebot_from_speech(self, parsed: dict[str, Any], transcript: str, *, execute: bool) -> list[dict[str, Any]]:
         """Execute a direct Nav2 delivery command from a final STT transcript.
