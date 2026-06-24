@@ -215,13 +215,15 @@ class ObjectPickPlaceCoordinator:
         publish_status: Callable[[str], None],
         *,
         set_target_color: Callable[[str], None] | None = None,
-        target_colors: tuple[str, ...] = ("yellow", "red"),
+        target_colors: tuple[str, ...] = ("car_lower", "car_upper"),
     ) -> None:
         self.config = config
         self.execute_steps = execute_steps
         self.publish_status = publish_status
+        # The callback name is kept for backward compatibility; in YOLO mode the
+        # published value is a class label such as car_lower/car_upper.
         self.set_target_color = set_target_color or (lambda _color: None)
-        self.target_colors = tuple(color.strip().lower() for color in target_colors if color.strip()) or ("yellow", "red")
+        self.target_colors = tuple(color.strip().lower() for color in target_colors if color.strip()) or ("car_lower", "car_upper")
         self.completed_points: list[CameraPoint] = []
         self.executing = False
         self._ignore_targets_until = 0.0
@@ -305,8 +307,10 @@ class TwoObjectPickPlaceNode:
             conveyor_step_delay_sec=conveyor_step_delay_sec,
         )
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
-        target_colors_param = str(self.node.declare_parameter("target_colors", "yellow,red").value)
-        self.target_colors = tuple(color.strip().lower() for color in target_colors_param.split(",") if color.strip()) or ("yellow", "red")
+        target_colors_param = str(self.node.declare_parameter("target_colors", "car_lower,car_upper").value)
+        # For compatibility with old launch files the parameter is still named
+        # target_colors, but YOLO mode treats these values as class labels.
+        self.target_colors = tuple(color.strip().lower() for color in target_colors_param.split(",") if color.strip()) or ("car_lower", "car_upper")
         self.ptp_action = str(self.node.declare_parameter("ptp_action", "PTP_action").value)
         self.conveyor_command_template = str(self.node.declare_parameter("conveyor_command", "").value)
         self.subscription = self.node.create_subscription(Point, "/target_pixel", self.target_callback, 10)
@@ -378,7 +382,7 @@ class TwoObjectPickPlaceNode:
         msg = String()
         msg.data = color
         self.target_color_pub.publish(msg)
-        self.node.get_logger().info(f"Target color set to {color}")
+        self.node.get_logger().info(f"Target detector value set to {color}")
 
     def send_pose_and_wait(self, target_pose: list[float]) -> None:
         goal_msg = self.PointToPoint.Goal()

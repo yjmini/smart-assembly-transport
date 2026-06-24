@@ -3,9 +3,12 @@ import pytest
 from sem1_pjt_ws.src.vision_detector.vision_detector.realsense_detector import (
     HsvRange,
     RealSenseIntrinsics,
+    YoloDetection,
     deproject_pixel_to_camera_mm,
     detect_largest_colored_depth_point,
     detect_largest_colored_depth_point_by_color,
+    detect_largest_yolo_depth_point,
+    select_yolo_detection,
 )
 
 
@@ -62,3 +65,54 @@ def test_red_target_color_uses_red_hue_wraparound_mask():
     assert detection is not None
     assert detection.pixel == pytest.approx((50, 40), abs=2)
     assert detection.camera_point_mm == pytest.approx((-10.0, -10.0, 450.0), abs=3.0)
+
+
+def test_select_yolo_detection_filters_for_car_labels_and_confidence():
+    detections = [
+        YoloDetection("car_lower", 0.91, (10, 20, 80, 100)),
+        YoloDetection("car_upper", 0.84, (100, 30, 150, 90)),
+        YoloDetection("person", 0.99, (0, 0, 200, 200)),
+        YoloDetection("car_lower", 0.10, (20, 20, 120, 120)),
+    ]
+
+    selected = select_yolo_detection(detections, ["car_lower"], min_confidence=0.35, min_area=500)
+
+    assert selected is not None
+    assert selected.label == "car_lower"
+    assert selected.confidence == pytest.approx(0.91)
+    assert selected.center_pixel == (45, 60)
+
+
+def test_yolo_depth_detection_returns_center_3d_point_and_label():
+    import numpy as np
+
+    class FakeResults:
+        names = {0: "car_lower", 1: "car_upper"}
+        xyxy = [np.array([[20, 30, 80, 90, 0.88, 0]], dtype=np.float32)]
+
+    class FakeYoloModel:
+        names = FakeResults.names
+
+        def __call__(self, _image):
+            return FakeResults()
+
+    bgr = np.zeros((120, 160, 3), dtype=np.uint8)
+    depth = np.zeros((120, 160), dtype=np.uint16)
+    depth[57:64, 47:54] = 500
+    intrinsics = RealSenseIntrinsics(fx=500.0, fy=500.0, cx=80.0, cy=60.0)
+
+    detection = detect_largest_yolo_depth_point(
+        bgr,
+        depth,
+        intrinsics,
+        FakeYoloModel(),
+        ["car_lower", "car_upper"],
+        min_confidence=0.35,
+        min_area=500,
+    )
+
+    assert detection is not None
+    assert detection.label == "car_lower"
+    assert detection.confidence == pytest.approx(0.88, abs=0.001)
+    assert detection.pixel == (50, 60)
+    assert detection.camera_point_mm == pytest.approx((-30.0, 0.0, 500.0), abs=0.01)

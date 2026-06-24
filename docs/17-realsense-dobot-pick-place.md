@@ -8,7 +8,7 @@
 
 | 패키지 | 실행명 | 역할 |
 |---|---|---|
-| `vision_detector` | `realsense_object_detector` | RealSense color/depth/camera_info를 받아 HSV 기반으로 물체 3D 좌표를 `/target_pixel`에 publish |
+| `vision_detector` | `realsense_object_detector` | RealSense color/depth/camera_info를 받아 YOLOv5 `best.pt`의 `car_lower`/`car_upper` 라벨 또는 legacy HSV 기반으로 물체 3D 좌표를 `/target_pixel`에 publish |
 | `dobot_controller` | `two_object_pick_place` | `/target_pixel`을 받아 Dobot pick/place를 2회 수행한 뒤 Conveyor Pi에 start 명령 전송 |
 
 ## 토픽/액션/서비스
@@ -18,7 +18,7 @@
 | `/camera/camera/color/image_raw` | `sensor_msgs/Image` | RealSense RGB 영상 |
 | `/camera/camera/aligned_depth_to_color/image_raw` | `sensor_msgs/Image` | RGB에 정렬된 depth 영상 |
 | `/camera/camera/color/camera_info` | `sensor_msgs/CameraInfo` | RealSense intrinsics |
-| `/target_color` | `std_msgs/String` | 감지할 색상. 기본 `yellow` |
+| `/target_color` | `std_msgs/String` | YOLO 모드에서는 감지할 라벨(`car_lower`, `car_upper`), legacy HSV 모드에서는 색상. 기본 `car_lower` |
 | `/target_pixel` | `geometry_msgs/Point` | camera-frame 3D 좌표(mm): `x`, `y`, `z` |
 | `PTP_action` | `dobot_msgs/action/PointToPoint` | Dobot PTP 이동 action |
 | `/dobot_suction_cup_service` | `dobot_msgs/srv/SuctionCupControl` | 흡착 ON/OFF |
@@ -144,7 +144,21 @@ ros2 launch dobot_bringup dobot_magician_control_system.launch.py
 ros2 action list | grep PTP_action
 ```
 
-## 5. RealSense detector 실행
+## 5. YOLO 모델 위치
+
+학습된 모델은 repository 루트에 있던 `best.pt`를 다음 위치로 옮겨 사용합니다. `.gitignore`의 `*.pt` 규칙 때문에 Git에는 올라가지 않으므로, 다른 PC에서는 같은 경로에 직접 복사해야 합니다.
+
+```text
+/home/ssafy/smart-assembly-transport/models/yolo/car_parts_best.pt
+```
+
+SHA-256 확인값:
+
+```text
+82e1e142b78bdf6da44b7b52ad379ef1a92c08f38b811e85706d1613b3ae7f40
+```
+
+## 6. RealSense + YOLO detector 실행
 
 새 터미널:
 
@@ -152,22 +166,31 @@ ros2 action list | grep PTP_action
 cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 run vision_detector realsense_object_detector --ros-args -p target_color:=yellow -p min_area:=1000.0
+ros2 run vision_detector realsense_object_detector --ros-args \
+  -p detector_mode:=yolo \
+  -p yolo_model_path:=/home/ssafy/smart-assembly-transport/models/yolo/car_parts_best.pt \
+  -p target_labels:=car_lower,car_upper \
+  -p min_confidence:=0.35 \
+  -p min_area:=1000.0
 ```
 
-색상 변경:
+감지 라벨 수동 변경:
 
 ```bash
-ros2 topic pub --once /target_color std_msgs/msg/String "{data: yellow}"
+ros2 topic pub --once /target_color std_msgs/msg/String "{data: car_upper}"
+# 또는 명시적 라벨 명령 토픽
+ros2 topic pub --once /target_label_cmd std_msgs/msg/String "{data: car_upper}"
 ```
 
-지원 색상:
+지원 라벨:
 
 ```text
-yellow, red, blue, green
+car_lower, car_upper
 ```
 
-## 6. Dobot 2개 물체 pick/place 노드 실행
+색상 기반 이전 방식이 필요하면 `-p detector_mode:=color -p target_color:=yellow`로 실행할 수 있습니다.
+
+## 7. Dobot 2개 물체 pick/place 노드 실행
 
 분류 기능을 쓰려면 Conveyor Pi의 edge script도 최신이어야 합니다.
 
@@ -183,7 +206,7 @@ cd /home/ssafy/smart-assembly-transport/sem1_pjt_ws
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 run dobot_controller two_object_pick_place --ros-args \
-  -p target_colors:=yellow,red \
+  -p target_colors:=car_lower,car_upper \
   -p quality_result:=normal \
   -p conveyor_sort_steps:=3200
 ```
@@ -200,7 +223,7 @@ quality_result:=abnormal → 오른쪽 분류(sort-right)
 동작 순서:
 
 ```text
-1. `/target_color=yellow`로 첫 번째 색상 감지
+1. `/target_color=car_lower`로 첫 번째 라벨 감지
 2. /target_pixel 첫 번째 좌표 수신
 3. Dobot이 첫 번째 물체 위로 이동
 4. pick_z로 내려감
@@ -210,14 +233,14 @@ quality_result:=abnormal → 오른쪽 분류(sort-right)
 8. 컨베이어 z 위치까지 내려감
 9. suction OFF로 컨베이어에 안정적으로 놓음
 10. safe_z로 다시 상승
-11. `/target_color=red`로 두 번째 색상 전환 후 잠시 대기
+11. `/target_color=car_upper`로 두 번째 라벨 전환 후 잠시 대기
 12. 두 번째 /target_pixel 좌표 수신
 13. 같은 순서로 두 번째 물체를 컨베이어에 놓음
 14. 품질 결과가 `normal`이면 컨베이어를 길게 구동하면서 왼쪽으로 분류
 15. 품질 결과가 `abnormal`이면 컨베이어를 길게 구동하면서 오른쪽으로 분류
 ```
 
-## 7. 현재 기준 좌표/보정값
+## 8. 현재 기준 좌표/보정값
 
 `project_pill`의 동작 코드에서 가져온 초기값입니다.
 
@@ -239,7 +262,7 @@ object_place_spacing_y_mm = 28.0
 
 실제 테이블에서는 `pick_z_mm`, `conveyor_place_pose`, `object_place_spacing_y_mm`는 미세 조정이 필요할 수 있습니다.
 
-## 8. 모니터링
+## 9. 모니터링
 
 계획 JSON 확인:
 
@@ -260,7 +283,7 @@ COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2
 COMPLETED_TWO_OBJECT_PICK_PLACE
 ```
 
-## 9. 안전 주의
+## 10. 안전 주의
 
 - Dobot workspace 안에 손을 넣지 마세요.
 - 첫 테스트는 suction/높이 보정값을 보수적으로 잡고 진행하세요.

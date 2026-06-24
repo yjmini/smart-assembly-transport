@@ -82,7 +82,7 @@ def test_target_callback_work_is_dispatched_off_executor_thread():
         execute_steps,
         statuses.append,
         set_target_color=target_colors.append,
-        target_colors=("yellow", "red"),
+        target_colors=("car_lower", "car_upper"),
     )
 
     started = time.monotonic()
@@ -97,7 +97,7 @@ def test_target_callback_work_is_dispatched_off_executor_thread():
 
     assert coordinator.completed_count == 1
     assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2"]
-    assert target_colors == ["yellow", "red"]
+    assert target_colors == ["car_lower", "car_upper"]
     assert executed_batches[0][0] == "object_1_move_above_pick"
 
 
@@ -115,7 +115,7 @@ def test_second_object_starts_conveyor_after_color_switch():
         execute_steps,
         statuses.append,
         set_target_color=target_colors.append,
-        target_colors=("yellow", "red"),
+        target_colors=("car_lower", "car_upper"),
     )
 
     assert coordinator.accept_target(CameraPoint(20.0, -109.0, 384.0)) is True
@@ -125,7 +125,7 @@ def test_second_object_starts_conveyor_after_color_switch():
 
     assert coordinator.completed_count == 2
     assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2", "COMPLETED_TWO_OBJECT_PICK_PLACE"]
-    assert target_colors == ["yellow", "red"]
+    assert target_colors == ["car_lower", "car_upper"]
     assert executed_batches[-1] == ["sort_conveyor_left_after_quality_pass"]
 
 
