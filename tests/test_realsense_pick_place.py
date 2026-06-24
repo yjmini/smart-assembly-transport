@@ -63,8 +63,19 @@ def test_project_pill_reference_transform_maps_camera_point_to_robot_xy():
 def test_reference_pick_and_place_z_values_are_lowered_for_hardware_smoke_test():
     config = PickPlaceConfig.reference_from_project_pill()
 
-    assert config.pick_z_mm == pytest.approx(-47.0)
-    assert config.conveyor_pose_mm.z == pytest.approx(9.8)
+    assert config.pick_z_mm == pytest.approx(-50.0)
+    assert config.conveyor_pose_mm.z == pytest.approx(6.8)
+
+
+def test_car_upper_places_higher_than_car_lower_for_stack():
+    config = PickPlaceConfig.reference_from_project_pill()
+
+    lower_pose = config.conveyor_pose_for_index(1)
+    upper_pose = config.conveyor_pose_for_index(2)
+
+    assert lower_pose.z == pytest.approx(6.8)
+    assert upper_pose.z == pytest.approx(14.8)
+    assert upper_pose.y == pytest.approx(lower_pose.y + config.object_place_spacing_y_mm)
 
 
 def test_pick_place_plan_requires_exactly_two_objects():

@@ -242,15 +242,18 @@ quality_result:=abnormal → 오른쪽 분류(sort-right)
 
 ## 8. 현재 기준 좌표/보정값
 
-`project_pill`의 동작 코드에서 가져온 뒤, 실제 YOLO/Dobot 테스트에서
-흡착/놓기 높이가 약 8mm 높게 잡혀 물체를 안정적으로 잡지 못한 피드백을
-반영해 `pick_z_mm`와 컨베이어 place Z를 각각 8mm 낮춘 값입니다.
+`project_pill`의 동작 코드에서 가져온 뒤, 실제 YOLO/Dobot 테스트 피드백을
+반영해 조정한 값입니다. pick은 직전 값보다 3mm 더 낮췄고,
+`car_lower`는 컨베이어에 더 낮게 내려놓되 `car_upper`는 `car_lower` 위에
+쌓이도록 더 높은 Z에서 release합니다.
 
 ```text
 safe_z_mm = 70.0
-pick_z_mm = -47.0
-conveyor_place_pose = x=48.2, y=196.3, z=9.8, r=0.0
+pick_z_mm = -50.0
+car_lower_place_pose = x=48.2, y=196.3, z=6.8, r=0.0
+car_upper_place_pose = x=48.2, y=224.3, z=14.8, r=0.0
 object_place_spacing_y_mm = 28.0
+upper_stack_place_lift_mm = 8.0
 ```
 
 카메라 → Dobot 변환 행렬도 `project_pill`의 `control_node.py` 값을 사용합니다.
@@ -289,6 +292,7 @@ COMPLETED_TWO_OBJECT_PICK_PLACE
 
 - Dobot workspace 안에 손을 넣지 마세요.
 - 첫 테스트는 suction/높이 보정값을 보수적으로 잡고 진행하세요.
-- `pick_z_mm=-47.0`, `conveyor_place_pose.z=9.8`은 첫 하드웨어 테스트 후 8mm 낮춘 값입니다. 너무 낮아 끌리면 1~2mm씩 다시 올려 조정하세요.
+- `pick_z_mm=-50.0`은 직전 테스트값에서 3mm 더 낮춘 값입니다.
+- `car_lower` place Z는 `6.8`, `car_upper` place Z는 `14.8`입니다. `car_upper`가 `car_lower` 위에 잘 쌓이지 않으면 `upper_stack_place_lift_mm`를 1~2mm씩 조정하세요.
 - 컨베이어는 두 번째 물체를 놓은 뒤 한 번만 start됩니다.
 - 비상 상황에서는 Conveyor Pi emergency-stop과 Dobot E-stop을 우선 사용하세요.

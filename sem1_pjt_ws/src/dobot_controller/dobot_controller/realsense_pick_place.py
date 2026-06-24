@@ -78,6 +78,7 @@ class PickPlaceConfig:
     conveyor_pose_mm: Pose4D
     conveyor_retreat_z_mm: float
     object_place_spacing_y_mm: float
+    upper_stack_place_lift_mm: float
     color_switch_settle_sec: float = 1.0
     quality_result: str = "normal"
     conveyor_sort_steps: int = 3200
@@ -102,13 +103,15 @@ class PickPlaceConfig:
                 (0.0, 0.0, 0.0, 1.0),
             ),
             safe_z_mm=70.0,
-            # 2026-06 hardware calibration: first YOLO/Dobot smoke test was
-            # about 8 mm too high to reliably pick and release the parts, so
-            # lower both the pickup Z and conveyor placement Z by 8 mm.
-            pick_z_mm=-47.0,
-            conveyor_pose_mm=Pose4D(48.2, 196.3, 9.8, 0.0),
+            # 2026-06 hardware calibration: lower pickup 3 mm further after
+            # the second smoke test.  Place car_lower close to the belt, then
+            # place car_upper higher so it stacks on top of car_lower instead
+            # of pressing down at the same conveyor Z.
+            pick_z_mm=-50.0,
+            conveyor_pose_mm=Pose4D(48.2, 196.3, 6.8, 0.0),
             conveyor_retreat_z_mm=70.0,
             object_place_spacing_y_mm=28.0,
+            upper_stack_place_lift_mm=8.0,
             motion_r=0.0,
         )
 
@@ -124,10 +127,11 @@ class PickPlaceConfig:
 
     def conveyor_pose_for_index(self, index: int) -> Pose4D:
         offset_y = (index - 1) * self.object_place_spacing_y_mm
+        stack_lift_z = self.upper_stack_place_lift_mm if index >= 2 else 0.0
         return Pose4D(
             self.conveyor_pose_mm.x,
             self.conveyor_pose_mm.y + offset_y,
-            self.conveyor_pose_mm.z,
+            self.conveyor_pose_mm.z + stack_lift_z,
             self.conveyor_pose_mm.r,
         )
 
