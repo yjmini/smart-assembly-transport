@@ -3,3 +3,4 @@ opencv-python
 websockets
 Django>=4.2,<5.1
 PyMySQL
+PyYAML

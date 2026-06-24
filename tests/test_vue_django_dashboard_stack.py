@@ -19,7 +19,7 @@ def test_vue_dashboard_declares_required_frontend_stack_and_routes():
     router = read("web/src/router.js")
     assert "createRouter" in router
     assert "createWebHashHistory" in router
-    for route in ["/", "/logs", "/settings"]:
+    for route in ["/", "/progress", "/results"]:
         assert f"path: '{route}'" in router or f'path: "{route}"' in router
 
 

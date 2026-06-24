@@ -87,3 +87,64 @@ def metrics(request: HttpRequest) -> JsonResponse:
         "deliveries": DeliveryResult.objects.filter(success=True).count(),
         "emergency_stops": EmergencyStopLog.objects.count(),
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def seed_demo_data(request: HttpRequest) -> JsonResponse:
+    """Populate deterministic dashboard demo rows for Vue/API connection checks."""
+    order_a = Order.objects.create(
+        command="A구역으로 조립품 배송 시작",
+        destination="A",
+        parts=["base", "top"],
+        status="DELIVERED",
+    )
+    order_b = Order.objects.create(
+        command="B구역 긴급 배송 dry-run",
+        destination="B",
+        parts=["base", "top", "cover"],
+        status="ORDER_RECEIVED",
+    )
+    demo_events = [
+        ("order.created", "ORDER_RECEIVED", {"order_id": order_a.id, "destination": "A"}),
+        ("vision.base_in_position", "BASE_DETECTED_STOPPING", {"confidence": 0.96}),
+        ("dobot.assembly_stage_2_done", "QC_CHECK", {"step": "stage_2"}),
+        ("turtlebot.delivery_arrived", "DELIVERED", {"destination": "A"}),
+        ("safety.hand_detected", "WAIT_ADMIN_UNLOCK", {"source": "dashboard-demo"}),
+    ]
+    for event_type, state, payload in demo_events:
+        FactoryEvent.objects.create(event_type=event_type, state=state, payload=payload)
+    VisionDetection.objects.create(
+        label="yellow_base",
+        confidence=0.94,
+        bbox={"x": 128, "y": 96, "w": 180, "h": 120},
+        camera_point_mm=[142, -38, 612],
+    )
+    VisionDetection.objects.create(
+        label="operator_hand",
+        confidence=0.88,
+        bbox={"x": 320, "y": 118, "w": 92, "h": 74},
+        camera_point_mm=[280, 42, 550],
+    )
+    DeliveryResult.objects.create(
+        destination="A",
+        target_pose={"x": 1.2, "y": 0.0, "yaw": 0.0},
+        success=True,
+        raw_result={"mode": "demo", "order_id": order_a.id},
+    )
+    EmergencyStopLog.objects.create(
+        source="dashboard-demo",
+        reason="dummy safety event for UI verification",
+        payload={"order_id": order_b.id, "state": "WAIT_ADMIN_UNLOCK"},
+    )
+    return JsonResponse({
+        "seeded": True,
+        "orders": [order_a.id, order_b.id],
+        "metrics": {
+            "orders": Order.objects.count(),
+            "events": FactoryEvent.objects.count(),
+            "vision_detections": VisionDetection.objects.count(),
+            "deliveries": DeliveryResult.objects.filter(success=True).count(),
+            "emergency_stops": EmergencyStopLog.objects.count(),
+        },
+    })

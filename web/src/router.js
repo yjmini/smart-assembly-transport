@@ -1,13 +1,13 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import DashboardView from './views/DashboardView.vue';
-import LogsView from './views/LogsView.vue';
-import SettingsView from './views/SettingsView.vue';
+import ProgressView from './views/ProgressView.vue';
+import ResultsView from './views/ResultsView.vue';
 
 export default createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', name: 'dashboard', component: DashboardView },
-    { path: '/logs', name: 'logs', component: LogsView },
-    { path: '/settings', name: 'settings', component: SettingsView },
+    { path: '/', name: 'home', component: DashboardView },
+    { path: '/progress', name: 'progress', component: ProgressView },
+    { path: '/results', name: 'results', component: ResultsView },
   ],
 });
