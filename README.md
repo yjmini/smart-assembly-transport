@@ -62,6 +62,32 @@ WebSocket bridge는 다음으로 실행합니다.
 python3 -m server.app
 ```
 
+## Vue/Django Dashboard Quick Start
+
+새 대시보드는 Vue.js + Vue Router + Chart.js 프론트엔드와 Django API 백엔드를 사용합니다. 운영 환경 DB는 MySQL을 기본값으로 사용합니다.
+
+```bash
+# Frontend build
+cd /home/ssafy/smart-assembly-transport/web
+npm install
+npm run build
+
+# Django backend + MySQL 설정 예시
+cd /home/ssafy/smart-assembly-transport
+export SMART_ASSEMBLY_DB_NAME=smart_assembly_transport
+export SMART_ASSEMBLY_DB_USER=smart_assembly
+export SMART_ASSEMBLY_DB_PASSWORD=smart_assembly
+python3 manage.py migrate
+python3 manage.py runserver 0.0.0.0:8000
+```
+
+로컬 개발 PC에 MySQL 서버가 없을 때만 다음 fallback으로 Django API와 Vue build를 검증할 수 있습니다.
+
+```bash
+SMART_ASSEMBLY_DB_BACKEND=sqlite python3 manage.py migrate
+SMART_ASSEMBLY_DB_BACKEND=sqlite python3 manage.py runserver 127.0.0.1:8000
+```
+
 ## Documentation
 
 프로젝트 상세 기획은 [`docs/`](./docs/README.md)에 정리합니다.

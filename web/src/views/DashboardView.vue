@@ -1,0 +1,209 @@
+<template>
+<main class="app">
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">AUTOMATED ASSEMBLY + AUTONOMOUS DELIVERY</div>
+      <h1>Smart Assembly Transport Control Center</h1>
+      <div class="subtitle">RealSense D435i · YOLO · SLAM · STT · Dobot · Conveyor · TurtleBot 운영 대시보드</div>
+    </div>
+    <section id="productivityCards" class="hero-metrics" aria-label="생산성 지표">
+      <div class="metric ok"><b id="completedCycles">0</b><span>완료 사이클</span></div>
+      <div class="metric blue"><b id="assembledCount">0</b><span>조립 완료</span></div>
+      <div class="metric ok"><b id="deliveryCount">0</b><span>배송 완료</span></div>
+      <div class="metric warn"><b id="emergencyStopCount">0</b><span>비상정지</span></div>
+    </section>
+    <div class="top-actions"><div id="connection" class="status-pill">DISCONNECTED</div><div id="modeBadge" class="badge">DRY-RUN READY</div></div>
+  </header>
+
+  <section class="card flow-card" id="flowOverview">
+    <h2><span>전체 진행상황</span><span class="eyebrow" id="currentStateLabel">IDLE</span></h2>
+    <div id="stageStrip" class="stage-strip"></div>
+  </section>
+
+  <section class="dashboard">
+    <section class="card camera-card" id="realsensePanel">
+      <h2><span>RealSense D435i · YOLO 실시간 화면</span><span class="eyebrow" id="visionStatus">STREAM WAITING</span></h2>
+      <div class="camera-shell">
+        <img id="cameraFeed" alt="RealSense D435i YOLO 실시간 화면" />
+        <canvas id="detectionOverlay" class="detection-canvas" aria-label="YOLO 감지 박스 오버레이"></canvas>
+        <div id="cameraPlaceholder" class="camera-placeholder"><div><strong>YOLO Preview</strong><span class="muted">MJPEG/HTTP stream URL을 연결하면 여기에 표시됩니다.</span></div></div>
+        <div class="camera-overlay"><span class="chip">/camera/camera/color/image_raw</span><span class="chip" id="detectionChip">detections: waiting</span></div>
+      </div>
+      <div class="camera-tools"><input id="cameraUrl" value="http://127.0.0.1:8080/stream?topic=/camera/camera/color/image_raw" /><button id="cameraConnectBtn">스트림 연결</button></div>
+      <div id="visionDetections" class="vision-list" aria-label="YOLO 감지 객체 목록"></div>
+    </section>
+
+    <section class="card">
+      <h2><span>작업 제어</span><span class="eyebrow">COMMAND</span></h2>
+      <div class="controls">
+        <select id="destination"><option value="A">A 구역 배송</option><option value="B">B 구역 배송</option></select>
+        <button id="connectBtn">WebSocket 연결</button>
+        <button id="startBtn" class="primary">STT/Mock 작업 시작</button>
+        <button id="nextBtn">다음 mock 이벤트</button>
+        <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
+        <button id="unlockBtn" class="safe">관리자 Unlock</button>
+        <button id="hwStatusBtn">하드웨어 구성</button>
+        <button id="hwPlanBtn">파이프라인 계획</button>
+        <button id="hwRunBtn" class="warn">실제 order plan 실행</button>
+        <button id="resetBtn">UI 상태 초기화</button>
+      </div>
+      <div class="mini-grid"><input id="serverUrl" value="ws://127.0.0.1:8765" /><label class="toggle"><input id="executeToggle" type="checkbox" /> 실제 실행</label></div>
+      <p class="notice">기본은 DRY-RUN입니다. 실제 실행 모드를 켜야 SSH/ROS 명령이 장비로 전송됩니다.</p>
+    </section>
+
+    <section class="card map-card">
+      <h2><span>SLAM / TurtleBot 위치</span><span class="eyebrow">MAP FRAME</span></h2>
+      <div class="map-wrap">
+        <canvas id="slamMap" width="620" height="360" aria-label="SLAM 상에서의 TurtleBot 현재 위치"></canvas>
+        <div class="map-tools"><input id="mapUrl" value="../map/pjt_map_view_crop.png" /><button id="mapLoadBtn">SLAM 지도 로드</button></div>
+        <div id="mapMeta" class="map-meta">map: ../map/pjt_map_view_crop.png · user-cropped · resolution 0.05m/px · origin [-1.11,-3.59]</div>
+        <div id="turtlePose" class="pose-list">
+          <div class="pose-row"><span>destination</span><b id="poseDestination">A</b></div>
+          <div class="pose-row"><span>x</span><b id="poseX">0.00</b></div>
+          <div class="pose-row"><span>y</span><b id="poseY">0.00</b></div>
+          <div class="pose-row"><span>yaw</span><b id="poseYaw">0.00</b></div>
+          <div class="pose-row"><span>status</span><b id="poseStatus">대기</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card stack">
+      <section id="sttPanel">
+        <h2><span>Whisper STT / TTS 음성 연동</span><span class="eyebrow" id="sttStatus">WHISPER READY</span></h2>
+        <div class="stt-box">
+          <div id="sttTranscript" class="transcript">아직 수신된 Whisper STT 명령이 없습니다.</div>
+          <div class="speech-actions">
+            <input id="whisperMockText" value="A구역으로 조립품 배송 시작" aria-label="Whisper STT 테스트 문장" />
+            <button id="whisperMockBtn">텍스트 STT 반영</button>
+            <button id="micSttBtn" class="safe">마이크 STT 시작</button>
+            <button id="ttsReplayBtn">TTS 다시 말하기</button>
+          </div>
+          <div class="intent-grid">
+            <div class="intent"><small>intent</small><b id="sttIntent">create_order</b></div>
+            <div class="intent"><small>destination</small><b id="sttDestination">A</b></div>
+            <div class="intent"><small>parts</small><b id="sttParts">base, top</b></div>
+          </div>
+          <div id="ttsPanel" class="voice-box"><strong>TTS 안내 대기</strong><span id="ttsMessage">작업 완료/비상정지/복구 시 음성 안내 문장을 표시합니다.</span><div id="ttsStatus" class="voice-status">tts: idle</div></div>
+        </div>
+      </section>
+      <section class="timeline-card">
+        <h2><span>작업 타임라인</span><span class="eyebrow">EVENTS</span></h2>
+        <div id="operationsTimeline" class="timeline"></div>
+      </section>
+    </section>
+
+    <div class="right-bottom">
+      <section class="card hardware-card">
+        <h2><span>하드웨어 구성 요약</span><span class="eyebrow">TARGETS</span></h2>
+        <section class="hardware" id="hardwareCards"></section>
+      </section>
+      <section class="card chart-card">
+        <h2><span>생산성 Chart.js</span><span class="eyebrow">METRICS</span></h2>
+        <canvas id="productivityChart" aria-label="Chart.js 생산성 지표"></canvas>
+      </section>
+
+      <section class="card log-card">
+        <h2><span>이벤트 / 하드웨어 로그</span><span class="eyebrow">RAW</span></h2>
+        <div id="log" class="log"></div>
+      </section>
+    </div>
+  </section>
+</main>
+</template>
+
+<script setup>
+import { onMounted, onBeforeUnmount } from 'vue';
+import { Chart } from 'chart.js/auto';
+
+onMounted(() => {
+
+  const states=[['ORDER_RECEIVED','작업 명령 수신'],['CONVEYOR_MOVING','컨베이어 이동'],['BASE_DETECTED_STOPPING','비전 정위치 감지'],['ASSEMBLY_STAGE_1','Dobot 1차 조립'],['ASSEMBLY_STAGE_2','Dobot 2차 조립'],['QC_CHECK','YOLO/비전 품질 확인'],['LOADING_TO_TURTLEBOT','TurtleBot 적재'],['DELIVERY_NAVIGATING','SLAM/Nav2 배송'],['DELIVERED','배송 완료'],['RETURNING_HOME','시작 위치 복귀'],['RETURNED_HOME','다음 작업 대기']];
+  const mockEvents=[{type:'event',event:'conveyor.started'},{type:'event',event:'vision.base_in_position'},{type:'event',event:'conveyor.stopped'},{type:'event',event:'dobot.assembly_stage_1_done'},{type:'event',event:'dobot.assembly_stage_2_done'},{type:'event',event:'vision.qc_passed'},{type:'event',event:'dobot.loaded_to_turtlebot'},{type:'event',event:'turtlebot.delivery_arrived'},{type:'event',event:'turtlebot.return_requested'},{type:'event',event:'turtlebot.return_arrived'}];
+  const mapConfig={url:'../map/pjt_map_view_crop.png',resolution:0.05,origin:{x:-1.11,y:-3.59,yaw:0},image:null,loaded:false,sourceSize:{w:67,h:95},crop:{x:7,y:8,w:47,h:56},viewCrop:{x:7,y:12,w:41,h:28},rotation:'ccw',fit:'cover',displayTargets:{HOME:{pixel:{x:8,y:20},color:'#10b981',label:'HOME'},A:{pixel:{x:34.8,y:6},color:'#ef4444',label:'A'},B:{pixel:{x:34.5,y:21.2},color:'#3b82f6',label:'B'}}};
+  const state={currentState:null,eventIndex:0,lastSttCommand:'',sttIntent:'create_order',sttParts:['base','top'],lastTtsMessage:'',ttsStatus:'idle',completedCycles:0,assembledCount:0,deliveryCount:0,emergencyStopCount:0,turtlePose:{x:0,y:0,yaw:0,destination:'A',status:'대기'},hardwareTargets:{A:{x:1.2,y:0,yaw:0},B:{x:0,y:1.2,yaw:1.5708},HOME:{x:0,y:0,yaw:0}},visionDetections:[]};
+  let ws=null; let speechRecognition=null; let micListening=false; const $=id=>document.getElementById(id);
+  let productivityChart=null;
+  function renderProductivityChart(){const el=$('productivityChart');if(!el||typeof Chart==='undefined')return;const data=[state.completedCycles,state.assembledCount,state.deliveryCount,state.emergencyStopCount];if(!productivityChart){productivityChart=new Chart(el,{type:'bar',data:{labels:['완료','조립','배송','비상정지'],datasets:[{label:'생산성 지표',data,backgroundColor:['#10b981','#38bdf8','#7c5cff','#f59e0b']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#cbd5e1'},grid:{color:'rgba(255,255,255,.06)'}},y:{beginAtZero:true,ticks:{precision:0,color:'#cbd5e1'},grid:{color:'rgba(255,255,255,.06)'}}}}});return;}productivityChart.data.datasets[0].data=data;productivityChart.update('none')}
+
+  function setConn(t,c=''){const el=$('connection');el.className=`status-pill ${c}`;el.textContent=t}
+  function addTimeline(title, detail=''){const row=document.createElement('div');row.className='timeline-row';row.innerHTML=`<strong>${title}</strong><span class="time">${new Date().toLocaleTimeString()}</span>${detail?`<div class="muted">${detail}</div>`:''}`;$('operationsTimeline').prepend(row)}
+  function log(msg,data){const row=document.createElement('div');row.className='log-row';row.textContent=`${new Date().toLocaleTimeString()} ${msg}`+(data?`\n${JSON.stringify(data,null,2)}`:'');$('log').prepend(row)}
+  function stateIndex(){return states.findIndex(([s])=>s===state.currentState)}
+  function renderFlowOverview(){const idx=stateIndex();$('currentStateLabel').textContent=state.currentState||'IDLE';$('stageStrip').innerHTML=states.map(([s,l],i)=>`<div class="stage ${i<idx?'done':i===idx?'active':''}"><div class="n">${String(i+1).padStart(2,'0')}</div><div class="label">${l}</div><div class="state">${s}</div></div>`).join('')}
+  function renderProductivity(){$('completedCycles').textContent=state.completedCycles;$('assembledCount').textContent=state.assembledCount;$('deliveryCount').textContent=state.deliveryCount;$('emergencyStopCount').textContent=state.emergencyStopCount;renderProductivityChart()}
+  function renderSttCommand(){$('sttTranscript').textContent=state.lastSttCommand||'아직 수신된 Whisper STT 명령이 없습니다.';$('sttIntent').textContent=state.sttIntent;$('sttDestination').textContent=state.turtlePose.destination;$('sttParts').textContent=(state.sttParts||['base','top']).join(', ');$('ttsMessage').textContent=state.lastTtsMessage||'작업 완료/비상정지/복구 시 음성 안내 문장을 표시합니다.';$('ttsStatus').textContent=`tts: ${state.ttsStatus}`}
+  function drawTurtle(ctx,x,y,canvasYaw){ctx.save();ctx.translate(x,y);ctx.rotate(canvasYaw);ctx.fillStyle='#38bdf8';ctx.strokeStyle='rgba(0,0,0,.75)';ctx.lineWidth=3;ctx.shadowColor='rgba(56,189,248,.70)';ctx.shadowBlur=14;ctx.beginPath();ctx.moveTo(26,0);ctx.lineTo(-16,-15);ctx.lineTo(-9,0);ctx.lineTo(-16,15);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore()}
+  function mapPlacement(w,h){if(!mapConfig.loaded||!mapConfig.image)return null;const sx=w/mapConfig.image.width,sy=h/mapConfig.image.height;const scale=mapConfig.fit==='cover'?Math.max(sx,sy):Math.min(sx,sy);const dw=mapConfig.image.width*scale,dh=mapConfig.image.height*scale;return {scale,dw,dh,dx:(w-dw)/2,dy:(h-dh)/2}}
+  function mapImageToCanvas(pixel,w,h){const place=mapPlacement(w,h);return {x:place.dx+pixel.x*place.scale,y:place.dy+pixel.y*place.scale}}
+  function drawMapTarget(ctx,name,q,color){ctx.save();ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.82)';ctx.fillStyle=color;ctx.beginPath();ctx.arc(q.x,q.y,13,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=4;ctx.beginPath();ctx.arc(q.x,q.y,22,0,Math.PI*2);ctx.stroke();ctx.font='900 22px JetBrains Mono';const labelLeft=q.x>ctx.canvas.width-86;const tx=labelLeft?q.x-42:q.x+24,ty=q.y<34?q.y+31:q.y-18;const textW=ctx.measureText(name).width;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(tx-5,ty-23,textW+10,28);ctx.lineWidth=5;ctx.strokeStyle='rgba(0,0,0,.9)';ctx.strokeText(name,tx,ty);ctx.fillStyle='#ffffff';ctx.fillText(name,tx,ty);ctx.restore()}
+  function mapWorldToPixel(p,w,h){if(mapConfig.loaded&&mapConfig.image){const srcX=(p.x-mapConfig.origin.x)/mapConfig.resolution;const srcY=(mapConfig.sourceSize?.h||mapConfig.image.height)-(p.y-mapConfig.origin.y)/mapConfig.resolution;let imgX=srcX,imgY=srcY;if(mapConfig.crop){const lx=srcX-mapConfig.crop.x,ly=srcY-mapConfig.crop.y;if(mapConfig.rotation==='ccw'){imgX=ly;imgY=mapConfig.crop.w-lx}else{imgX=lx;imgY=ly}if(mapConfig.viewCrop){imgX-=mapConfig.viewCrop.x;imgY-=mapConfig.viewCrop.y}}const place=mapPlacement(w,h);return {x:place.dx+imgX*place.scale,y:place.dy+imgY*place.scale}}return {x:w/2+p.x*110,y:h/2-p.y*110}}
+  function mapWorldYawToCanvasYaw(p,w,h){const a=mapWorldToPixel(p,w,h);const step=0.1;const b=mapWorldToPixel({x:p.x+Math.cos(p.yaw)*step,y:p.y+Math.sin(p.yaw)*step},w,h);return Math.atan2(b.y-a.y,b.x-a.x)}
+  function shouldAcceptTurtlePose(next){const prev=state.turtlePose;const now=Number(next.stamp||Date.now()/1000);const last=Number(prev.stamp||0);const dist=Math.hypot((+next.x)-(+prev.x),(+next.y)-(+prev.y));const dt=last?Math.max(0.001,now-last):1;const speed=dist/dt;const firstLive=!prev.live;const maxStep=Math.max(0.25,dt*0.8);const plausible=firstLive||dist<=maxStep;return {accepted:plausible,dist,speed,maxStep}}
+  function applyTurtlePoseMessage(d){const pose=d.pose||d;const next={x:+pose.x,y:+pose.y,yaw:+(pose.yaw||0),stamp:+(d.stamp||Date.now()/1000),live:true};const gate=shouldAcceptTurtlePose(next);if(!gate.accepted){state.turtlePose={...state.turtlePose,status:`pose jump ignored ${gate.dist.toFixed(2)}m`};log('turtlebot pose outlier ignored',{pose:next,dist_m:+gate.dist.toFixed(3),speed_mps:+gate.speed.toFixed(3),max_step_m:+gate.maxStep.toFixed(3)});return}state.turtlePose={...state.turtlePose,...next,status:d.status||'실시간 pose 수신'}}
+  function renderSlamMap(){const canvas=$('slamMap'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#07080a';ctx.fillRect(0,0,w,h);if(mapConfig.loaded&&mapConfig.image){const place=mapPlacement(w,h);ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();ctx.imageSmoothingEnabled=false;ctx.drawImage(mapConfig.image,place.dx,place.dy,place.dw,place.dh);ctx.restore();ctx.strokeStyle='rgba(56,189,248,.30)';ctx.lineWidth=2;ctx.strokeRect(Math.max(0,place.dx),Math.max(0,place.dy),Math.min(w,place.dw),Math.min(h,place.dh))}else{ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;for(let x=35;x<w;x+=35){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=35;y<h;y+=35){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}}Object.entries(state.hardwareTargets).forEach(([name,p])=>{const target=mapConfig.displayTargets?.[name];const q=target?.pixel&&mapConfig.loaded?mapImageToCanvas(target.pixel,w,h):mapWorldToPixel(p,w,h);drawMapTarget(ctx,target?.label||name,q,target?.color||(name==='HOME'?'#10b981':'#7170ff'))});const p=mapWorldToPixel(state.turtlePose,w,h);drawTurtle(ctx,p.x,p.y,mapWorldYawToCanvasYaw(state.turtlePose,w,h));$('poseDestination').textContent=state.turtlePose.destination;$('poseX').textContent=state.turtlePose.x.toFixed(2);$('poseY').textContent=state.turtlePose.y.toFixed(2);$('poseYaw').textContent=state.turtlePose.yaw.toFixed(2);$('poseStatus').textContent=state.turtlePose.status}
+  function detectionBox(d){const bbox=d.bbox||d.box||d.xywh||null;if(!bbox)return null;if(Array.isArray(bbox)){return {x:+bbox[0],y:+bbox[1],w:+bbox[2],h:+bbox[3]}}return {x:+(bbox.x||bbox.left||0),y:+(bbox.y||bbox.top||0),w:+(bbox.w||bbox.width||0),h:+(bbox.h||bbox.height||0)}}
+  function renderVisionDetections(){const list=$('visionDetections');const detections=state.visionDetections.slice(0,6);list.innerHTML=detections.length?detections.map(d=>`<div class="vision-card"><b>${d.label||d.class||'object'} ${(d.confidence??d.score??'').toString().slice(0,4)}</b><span>${d.depth_mm?`${Math.round(d.depth_mm)}mm`:d.camera_point_mm?`${d.camera_point_mm.map(v=>Math.round(v)).join(',')}mm`:'bbox tracked'}</span></div>`).join(''):'<div class="vision-card"><b>waiting</b><span>YOLO detection JSON 수신 대기</span></div>';const canvas=$('detectionOverlay'),ctx=canvas.getContext('2d'),rect=canvas.getBoundingClientRect();canvas.width=Math.max(1,Math.round(rect.width));canvas.height=Math.max(1,Math.round(rect.height));ctx.clearRect(0,0,canvas.width,canvas.height);detections.forEach((d,i)=>{const b=detectionBox(d);if(!b||!b.w||!b.h)return;const sx=canvas.width/(d.image_width||640),sy=canvas.height/(d.image_height||480);ctx.strokeStyle=['#38bdf8','#10b981','#f59e0b','#ef4444'][i%4];ctx.lineWidth=2;ctx.strokeRect(b.x*sx,b.y*sy,b.w*sx,b.h*sy);ctx.fillStyle='rgba(0,0,0,.68)';ctx.fillRect(b.x*sx,b.y*sy-18,Math.max(58,(String(d.label||d.class||'object').length+5)*8),18);ctx.fillStyle=ctx.strokeStyle;ctx.font='12px JetBrains Mono';ctx.fillText(`${d.label||d.class||'object'} ${Math.round((d.confidence??d.score??0)*100)}%`,b.x*sx+4,b.y*sy-5)});$('detectionChip').textContent=`detections: ${state.visionDetections.length}`}
+
+  function parseWhisperIntent(text){const t=(text||'').toLowerCase();if(['정지','멈춰','중지','stop','emergency'].some(k=>t.includes(k)))return {intent:'emergency_stop',destination:state.turtlePose.destination,parts:[]};const isHome=['home','홈','원래 위치','처음 위치','시작 위치','제자리','복귀'].some(k=>t.includes(k));const destination=isHome?'HOME':(t.includes('b구역')||t.includes('b 구역')||t.includes('비구역')||t.includes('비 구역')||t.includes('zone b'))?'B':'A';return {intent:'create_order',destination,parts:isHome?[]:['base','top']}}
+  function applyWhisperTranscript(text,isFinal=true){const parsed=parseWhisperIntent(text);const execute=$('executeToggle').checked;state.lastSttCommand=text;state.sttIntent=parsed.intent;state.sttParts=parsed.parts.length?parsed.parts:['-'];state.turtlePose.destination=parsed.destination;$('sttStatus').textContent=isFinal?(execute?'STT FINAL · REAL NAV':'STT FINAL'):'STT PARTIAL';addTimeline(isFinal?(execute?'STT 확정 · 실제 TurtleBot 이동':'STT 확정'):'STT 수신',text);if(isFinal&&parsed.intent==='create_order')send({type:'speech.stt.final',transcript:text,destination:parsed.destination,parts:parsed.parts,execute});if(isFinal&&parsed.intent==='emergency_stop')send({type:'speech.stt.final',transcript:text,execute});renderAll()}
+  function speechApi(){return window.SpeechRecognition||window.webkitSpeechRecognition||null}
+  function updateMicButton(){const btn=$('micSttBtn');if(!btn)return;btn.textContent=micListening?'마이크 STT 중지':'마이크 STT 시작';btn.className=micListening?'danger':'safe'}
+  function initBrowserStt(){const Recognition=speechApi();if(!Recognition){$('sttStatus').textContent='STT UNSUPPORTED';$('micSttBtn').disabled=true;$('micSttBtn').textContent='마이크 STT 미지원';return null}const rec=new Recognition();rec.lang='ko-KR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;rec.onstart=()=>{micListening=true;updateMicButton();$('sttStatus').textContent='MIC LISTENING';addTimeline('마이크 STT 시작','브라우저 마이크 권한을 허용하고 명령을 말하세요')};rec.onresult=ev=>{let interim='',finalText='';for(let i=ev.resultIndex;i<ev.results.length;i++){const transcript=ev.results[i][0].transcript.trim();if(ev.results[i].isFinal)finalText+=transcript;else interim+=transcript}if(interim){state.lastSttCommand=interim;$('sttStatus').textContent='STT PARTIAL';renderSttCommand()}if(finalText){$('whisperMockText').value=finalText;applyWhisperTranscript(finalText,true)}};rec.onerror=ev=>{micListening=false;updateMicButton();$('sttStatus').textContent=`STT ERROR: ${ev.error}`;log('microphone STT error',{error:ev.error,message:ev.message||''})};rec.onend=()=>{micListening=false;updateMicButton();if($('sttStatus').textContent==='MIC LISTENING')$('sttStatus').textContent='BROWSER STT READY'};return rec}
+  function toggleBrowserStt(){const Recognition=speechApi();if(!Recognition){$('sttStatus').textContent='STT UNSUPPORTED';log('브라우저가 SpeechRecognition API를 지원하지 않습니다. Chrome/Edge에서 http://127.0.0.1:3001로 접속하세요.');return}if(!speechRecognition)speechRecognition=initBrowserStt();if(micListening){speechRecognition.stop();return}connect().catch(()=>{});try{speechRecognition.start()}catch(e){log('microphone STT start failed',{message:String(e)});$('sttStatus').textContent='STT START ERROR'}}
+  function announceTts(text,reason='status'){if(!text)return;state.lastTtsMessage=text;state.ttsStatus=`speaking · ${reason}`;addTimeline('TTS 안내',text);if('speechSynthesis' in window){try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ko-KR';u.onend=()=>{state.ttsStatus='done';renderSttCommand();if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'speech.tts.done',text,reason}))};window.speechSynthesis.speak(u)}catch(e){state.ttsStatus='browser tts error';log('TTS error',{message:String(e)})}}renderAll()}
+  function ttsForState(factoryState){const dest=state.turtlePose.destination;if(factoryState==='ORDER_RECEIVED')return '작업 오더를 접수했습니다. 조립 공정을 시작합니다.';if(factoryState==='WAIT_ADMIN_UNLOCK')return '사람 손이 감지되어 공정을 정지합니다.';if(factoryState==='DELIVERED')return `${dest}구역 배송을 완료했습니다.`;if(factoryState==='RETURNED_HOME')return 'TurtleBot이 시작 위치로 복귀했습니다. 다음 작업을 진행할 수 있습니다.';return ''}
+
+  function updateOperationsFromEvent(d){if(d.type==='factory.state'&&d.state){state.currentState=d.state;const payload=d.payload||{};if(payload.speech){state.sttIntent=payload.speech.intent||state.sttIntent;state.lastSttCommand=payload.speech.command||state.lastSttCommand;state.sttParts=payload.speech.parts||state.sttParts;if(payload.speech.destination)state.turtlePose.destination=payload.speech.destination}if(payload.command) addTimeline(d.state,payload.command); if(d.state==='ASSEMBLY_STAGE_2') state.assembledCount+=1; if(d.state==='DELIVERED'){state.deliveryCount+=1;state.turtlePose.status='배송 완료'} if(d.state==='RETURNED_HOME'){state.completedCycles+=1;state.turtlePose.status='복귀 완료'} if(d.state==='DELIVERY_NAVIGATING'){state.turtlePose.status='배송 이동 중'} if(d.state==='RETURNING_HOME'){state.turtlePose.status='HOME 복귀 중'}const tts=ttsForState(d.state);if(tts)announceTts(tts,d.state)} if(d.type==='speech.stt.partial'||d.type==='speech.stt.final'||d.type==='whisper.transcript'){state.lastSttCommand=d.transcript||d.text||state.lastSttCommand;const parsed=parseWhisperIntent(state.lastSttCommand);state.sttIntent=parsed.intent;state.turtlePose.destination=parsed.destination;state.sttParts=parsed.parts;$('sttStatus').textContent=d.type==='speech.stt.partial'?'WHISPER PARTIAL':'WHISPER FINAL'} if(d.type==='speech.tts.speaking'||d.type==='speech.tts.done'||d.type==='speech.tts.ack'){state.lastTtsMessage=d.text||state.lastTtsMessage;state.ttsStatus=d.status||d.type.replace('speech.tts.','')} if(d.type==='vision.detections'||d.type==='vision.detection'){state.visionDetections=d.detections||[d.detection||d];$('visionStatus').textContent='DETECTIONS LIVE'} if(d.type==='turtlebot.pose'||d.type==='nav.pose'){applyTurtlePoseMessage(d)} if(d.type==='hardware.run_order_plan.result'){(d.events||[]).forEach(updateOperationsFromEvent)} if(d.type==='factory.error') addTimeline('ERROR',d.message); renderAll()}
+  function renderHardware(data){let s=data.type==='hardware.pipeline'?data:data; const cards=[]; if(s.conveyor)cards.push(['Conveyor Pi',s.conveyor.target||s.conveyor.host,`SSH ${s.conveyor.ssh_port||22}`]); if(s.turtlebot){state.hardwareTargets=s.turtlebot.targets||state.hardwareTargets;cards.push(['TurtleBot4',s.turtlebot.target||s.turtlebot.host,`ROS_DOMAIN_ID=${s.turtlebot.ros_domain_id} / home=${s.turtlebot.home_destination||'HOME'}`])} if(s.dobot)cards.push(['Dobot',s.dobot.action_name||s.dobot.ptp_action||s.dobot.mode,`${(s.dobot.target_poses||[]).length||'PTP'} steps`]); if(s.vision)cards.push(['RealSense D435i',s.vision.camera_topic||'camera',`YOLO base=${s.vision.base_color||'yellow'}`]); if(s.phases)cards.push(['Demo Phases',`${s.phases.length} checkpoints`,s.phases.map(p=>p.id).join(' → ')]); $('hardwareCards').innerHTML=cards.map(([a,b,c])=>`<div class="hw"><b>${a}</b><code>${b}</code><div class="tag">${c}</div></div>`).join(''); renderSlamMap()}
+  function renderAll(){renderFlowOverview();renderProductivity();renderSttCommand();renderSlamMap();renderVisionDetections();$('modeBadge').textContent=$('executeToggle').checked?'REAL EXECUTION ARMED':'DRY-RUN READY'}
+  async function connect(){if(ws&&ws.readyState===WebSocket.OPEN)return;ws=new WebSocket($('serverUrl').value);ws.onopen=()=>{setConn('CONNECTED','connected');log('connected');addTimeline('WebSocket 연결','server.app')};ws.onerror=()=>{setConn('ERROR','error');log('websocket error')};ws.onclose=()=>{setConn('DISCONNECTED');log('disconnected')};ws.onmessage=ev=>{const d=JSON.parse(ev.data);if(d.type==='hardware.status'||d.type==='hardware.pipeline')renderHardware(d);updateOperationsFromEvent(d);log('recv',d)}}
+  function send(msg){if(!ws||ws.readyState!==WebSocket.OPEN){log('먼저 WebSocket 연결을 누르세요');return;}if(msg.type==='order.create'){state.lastSttCommand=msg.command;state.turtlePose.destination=msg.destination;state.turtlePose.status='작업 접수';addTimeline('STT 명령 수신',msg.command)}log('send',msg);ws.send(JSON.stringify(msg));renderAll()}
+  function loadSlamMap(){mapConfig.url=$('mapUrl').value;const img=new Image();img.onload=()=>{mapConfig.image=img;mapConfig.loaded=true;$('mapMeta').textContent=`map: ${mapConfig.url} · ${img.width}x${img.height}px · user-cropped · resolution ${mapConfig.resolution}m/px · origin [${mapConfig.origin.x},${mapConfig.origin.y}]`;renderSlamMap();log('SLAM map loaded',{url:mapConfig.url,width:img.width,height:img.height})};img.onerror=()=>{mapConfig.loaded=false;$('mapMeta').textContent=`map load failed: ${mapConfig.url}`;log('SLAM map load failed',{url:mapConfig.url});renderSlamMap()};img.src=mapConfig.url}
+  $('connectBtn').onclick=connect;$('startBtn').onclick=async()=>{await connect();state.eventIndex=0;send({type:'order.create',command:`${$('destination').value} 구역으로 조립품 배송 시작`,destination:$('destination').value,parts:['base','top']})};
+  $('nextBtn').onclick=()=>{if(state.eventIndex>=mockEvents.length){log('더 이상 보낼 mock 이벤트가 없습니다');return;}send(mockEvents[state.eventIndex++])};
+  $('stopBtn').onclick=()=>{state.emergencyStopCount+=1;send({type:'event',event:'safety.hand_detected',payload:{source:'dashboard'}});renderProductivity()};$('unlockBtn').onclick=()=>send({type:'admin.unlock',admin:'operator'});
+  $('hwStatusBtn').onclick=()=>send({type:'hardware.status'});$('hwPlanBtn').onclick=()=>send({type:'hardware.pipeline'});$('hwRunBtn').onclick=()=>send({type:'hardware.run_order_plan',destination:$('destination').value,execute:$('executeToggle').checked});$('executeToggle').onchange=renderAll;
+  $('resetBtn').onclick=()=>{Object.assign(state,{currentState:null,eventIndex:0,lastSttCommand:'',sttIntent:'create_order',sttParts:['base','top'],lastTtsMessage:'',ttsStatus:'idle',completedCycles:0,assembledCount:0,deliveryCount:0,emergencyStopCount:0,turtlePose:{x:0,y:0,yaw:0,destination:$('destination').value,status:'대기'},visionDetections:[]});$('log').innerHTML='';$('operationsTimeline').innerHTML='';renderAll()};
+  function connectCameraStream(){const img=$('cameraFeed');const url=$('cameraUrl').value;img.src=url+(url.includes('?')?'&':'?')+`t=${Date.now()}`;img.style.display='block';$('cameraPlaceholder').style.display='none';$('visionStatus').textContent='STREAM CONNECTING';$('detectionChip').textContent='realsense: connecting';img.onload=()=>{$('visionStatus').textContent='STREAM LIVE';if(!state.visionDetections.length)$('detectionChip').textContent='realsense: live / YOLO pending'};img.onerror=()=>{$('visionStatus').textContent='STREAM ERROR';$('cameraPlaceholder').style.display='grid';img.style.display='none';$('detectionChip').textContent='realsense: bridge unavailable'}}
+  $('cameraConnectBtn').onclick=connectCameraStream;
+  $('whisperMockBtn').onclick=async()=>{await connect();applyWhisperTranscript($('whisperMockText').value,true)};$('micSttBtn').onclick=toggleBrowserStt;$('ttsReplayBtn').onclick=()=>announceTts(state.lastTtsMessage||'아직 재생할 TTS 안내가 없습니다.','replay');$('mapLoadBtn').onclick=loadSlamMap;window.addEventListener('resize',renderVisionDetections);
+  if(speechApi()){$('sttStatus').textContent='BROWSER STT READY'}else{$('sttStatus').textContent='STT UNSUPPORTED';$('micSttBtn').disabled=true;$('micSttBtn').textContent='마이크 STT 미지원'}
+  renderAll();loadSlamMap();connectCameraStream();addTimeline('Dashboard ready','RealSense 스트림과 실제 SLAM PNG 지도 로드 준비 완료');
+
+});
+
+onBeforeUnmount(() => { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (_) {} });
+
+</script>
+
+<style>
+
+    :root{
+      --bg:#07080b; --panel:#0d0f14; --panel2:#11141b; --surface:#171a22;
+      --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.055);
+      --text:#f5f7fb; --muted:#8b93a3; --sub:#cbd5e1; --dim:#606979;
+      --accent:#7c5cff; --accent2:#5e6ad2; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --blue:#38bdf8;
+      --radius:18px;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:radial-gradient(circle at 14% -8%,rgba(124,92,255,.25),transparent 30%),linear-gradient(180deg,#090b10,#050608);color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-feature-settings:"cv01","ss03";overflow:hidden}
+    .app{height:100vh;max-width:1880px;margin:0 auto;padding:14px;display:grid;grid-template-rows:auto auto 1fr;gap:9px;min-height:720px}
+    .topbar{display:grid;grid-template-columns:minmax(340px,1.05fr) minmax(520px,1.65fr) auto;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line2);border-radius:22px;background:rgba(13,15,20,.82);backdrop-filter:blur(18px);box-shadow:0 18px 65px rgba(0,0,0,.28)}
+    h1{margin:2px 0 4px;font-size:21px;font-weight:680;letter-spacing:-.65px}.subtitle{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.eyebrow{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.9px;font-weight:600}.muted{color:var(--muted)}
+    .top-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}.status-pill,.badge{padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.035);border:1px solid var(--line);color:var(--sub);font-size:11px;font-weight:700;white-space:nowrap}.connected{color:#9ff6cf;border-color:rgba(16,185,129,.45);background:rgba(16,185,129,.12)}.error{color:#fecdd3;border-color:rgba(239,68,68,.48);background:rgba(239,68,68,.12)}
+    .hero-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.metric{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--line2);border-radius:15px;background:rgba(255,255,255,.025)}.metric b{font-family:'JetBrains Mono';font-size:23px;line-height:1;letter-spacing:-.7px}.metric span{color:var(--muted);font-size:11.5px}.metric.ok b{color:var(--ok)}.metric.warn b{color:var(--warn)}.metric.blue b{color:var(--blue)}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.042),rgba(255,255,255,.018));border:1px solid var(--line);border-radius:var(--radius);padding:12px;box-shadow:0 22px 70px rgba(0,0,0,.28);min-width:0}.card h2{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px;font-size:14px;font-weight:700;letter-spacing:-.22px}
+    .flow-card{padding:10px 14px}.stage-strip{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:6px}.stage{height:47px;padding:7px 8px;border:1px solid var(--line2);border-radius:12px;background:rgba(255,255,255,.024);color:var(--dim);position:relative;overflow:hidden}.stage:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:rgba(255,255,255,.06)}.stage.done{color:#bff7df;border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.08)}.stage.done:before{background:var(--ok)}.stage.active{color:var(--text);border-color:rgba(124,92,255,.7);background:linear-gradient(180deg,rgba(124,92,255,.18),rgba(255,255,255,.025))}.stage.active:before{background:var(--accent)}.stage .n{font-family:'JetBrains Mono';font-size:10px;color:var(--muted);float:right}.stage .label{font-size:10.5px;font-weight:700;line-height:1.14;margin-right:18px}.stage .state{display:none}
+    .dashboard{display:grid;grid-template-columns:minmax(430px,1.25fr) minmax(300px,.9fr) minmax(300px,.9fr);grid-template-rows:minmax(230px,.98fr) minmax(190px,.58fr);gap:9px;min-height:0}.stack{display:grid;gap:9px;min-height:0}.camera-card{grid-row:1 / span 2;display:grid;grid-template-rows:auto minmax(0,1fr) auto}.camera-shell{position:relative;min-height:0;height:100%;border-radius:16px;overflow:hidden;background:linear-gradient(135deg,#111827,#030712);border:1px solid var(--line)}#cameraFeed{width:100%;height:100%;object-fit:cover;display:none}.detection-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.camera-placeholder{position:absolute;inset:0;display:grid;place-items:center;background-image:linear-gradient(rgba(124,92,255,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(124,92,255,.09) 1px,transparent 1px);background-size:30px 30px}.camera-placeholder div{text-align:center}.camera-placeholder strong{display:block;font-size:22px}.camera-placeholder span{font-size:13px}.camera-overlay{position:absolute;left:11px;right:11px;bottom:11px;display:flex;justify-content:space-between;gap:8px}.chip{font-family:'JetBrains Mono';font-size:10.5px;padding:6px 8px;border-radius:999px;background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.12);color:var(--sub)}.camera-tools{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px}.vision-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}.vision-card{border:1px solid rgba(56,189,248,.25);background:rgba(56,189,248,.07);border-radius:12px;padding:7px 8px;min-width:0}.vision-card b{display:block;font-family:'JetBrains Mono';font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vision-card span{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+    button,select,input{font:inherit;border:0;border-radius:11px;padding:8px 9px;min-width:0}button{cursor:pointer;color:var(--text);background:rgba(255,255,255,.045);border:1px solid var(--line);font-size:11.5px;font-weight:700;transition:.15s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}button:hover{border-color:rgba(124,92,255,.58);transform:translateY(-1px)}button.primary{background:linear-gradient(135deg,var(--accent2),#8754ff);border-color:rgba(255,255,255,.14)}button.danger{background:rgba(239,68,68,.17);border-color:rgba(239,68,68,.38)}button.safe{background:rgba(16,185,129,.14);border-color:rgba(16,185,129,.36)}button.warn{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.38)}select,input{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--line);font-size:12px}.controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.controls .primary{grid-column:2 / span 2}.mini-grid{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}label.toggle{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:11px;padding:8px;color:var(--sub);font-size:11px;white-space:nowrap}label.toggle input{width:auto}.notice{margin:6px 0 0;color:#ffd98a;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28);padding:7px 8px;border-radius:12px;line-height:1.25;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .stt-box{display:grid;gap:7px}.transcript{min-height:54px;padding:11px;border-radius:14px;background:rgba(124,92,255,.10);border:1px solid rgba(124,92,255,.28);font-size:14.5px;line-height:1.35}.intent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.intent{padding:7px 8px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid var(--line2)}.intent small{display:block;color:var(--muted);font-size:10px}.intent b{font-family:'JetBrains Mono';font-size:11px}.speech-actions{display:grid;grid-template-columns:1fr auto auto auto;gap:6px}.voice-box{padding:9px 10px;border-radius:13px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);font-size:12px;line-height:1.35}.voice-box strong{display:block;color:#bff7df;margin-bottom:3px}.voice-status{font-family:'JetBrains Mono';font-size:10px;color:var(--muted)}
+    .map-card{display:grid;grid-template-rows:auto minmax(0,1fr)}.map-wrap{display:grid;grid-template-columns:1fr;gap:7px;min-height:0}#slamMap{width:100%;height:100%;min-height:150px;border-radius:15px;border:1px solid var(--line);background:#07080a}.map-tools{display:grid;grid-template-columns:1fr auto;gap:6px}.map-meta{font-family:'JetBrains Mono';font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pose-list{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}.pose-row{display:flex;flex-direction:column;gap:2px;padding:7px 8px;border-radius:10px;background:rgba(255,255,255,.026);border:1px solid var(--line2);font-family:'JetBrains Mono';font-size:10.5px}.pose-row span:first-child{color:var(--muted);font-size:9.5px}.pose-row b{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .timeline,.log{overflow:auto;display:flex;flex-direction:column;gap:7px;min-height:0}.timeline{height:100%}.log{height:100%}.log-row,.timeline-row{white-space:pre-wrap;padding:8px 9px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line2);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:#c6d3ef}.timeline-row strong{font-family:'Inter';font-size:12.5px}.timeline-row .time{color:var(--dim);font-size:10px;margin-left:6px}.timeline-card,.log-card{display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0}.right-bottom{grid-column:3;grid-row:2;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px}.hardware-card{min-height:0}.hardware{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.hw{padding:8px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line);min-height:62px}.hw b{display:block;margin-bottom:4px;font-size:11.5px}.hw code{display:block;color:#9ff2c9;font-family:'JetBrains Mono';font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tag{font-size:10.5px;color:var(--muted);line-height:1.25;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+    @media (max-width:1100px){body{overflow:auto}.app{height:auto;min-height:100vh}.topbar{grid-template-columns:1fr;align-items:start}.top-actions{justify-content:flex-start}.dashboard{grid-template-columns:1fr 1fr;grid-template-rows:auto}.camera-card{grid-row:auto}.right-bottom{grid-column:1 / span 2;grid-row:auto}.stage-strip{grid-template-columns:repeat(6,1fr)}.stage{height:56px}}
+    @media (max-height:800px) and (min-width:1101px){body{overflow:auto}.app{height:auto;min-height:100vh}.dashboard{grid-template-rows:auto auto}.camera-shell{height:320px}.camera-card{grid-row:1 / span 2}.right-bottom{grid-column:3;grid-row:2}.log{max-height:88px}.timeline{max-height:78px}}
+    @media (max-width:820px){.app{padding:10px}.dashboard,.hero-metrics,.hardware-card{grid-template-columns:1fr}.hardware-card{grid-column:auto}.stage-strip{grid-template-columns:repeat(2,1fr)}.hardware,.controls,.mini-grid,.intent-grid,.pose-list{grid-template-columns:1fr}.subtitle{white-space:normal}body{overflow:auto}.camera-shell{height:320px}}
+  
+.chart-card{min-height:150px}.chart-card canvas{width:100%;height:120px}
+.nav-tabs{display:flex;gap:6px;margin-top:8px}.nav-tabs a{color:var(--sub);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:11px}.nav-tabs a.router-link-active{color:#fff;background:rgba(124,92,255,.22)}
+
+</style>

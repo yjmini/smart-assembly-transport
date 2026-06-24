@@ -1,0 +1,1 @@
+<template><main class='app'><section class='card'><h1>Operations Logs</h1><p>운영 로그는 Django `/api/events`와 WebSocket RAW 패널에 기록됩니다.</p><router-link to='/'>대시보드로 돌아가기</router-link></section></main></template>
