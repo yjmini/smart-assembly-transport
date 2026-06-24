@@ -4,6 +4,7 @@ install/
 log/
 *.bag
 *.db3
+*.sqlite3
 
 # Python
 __pycache__/

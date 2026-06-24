@@ -1,0 +1,1 @@
+<template><main class='app'><section class='card'><h1>Dashboard Settings</h1><p>WebSocket, RealSense stream, SLAM map URL은 대시보드 화면에서 즉시 변경할 수 있습니다.</p><router-link to='/'>대시보드로 돌아가기</router-link></section></main></template>
