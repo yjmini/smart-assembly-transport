@@ -27,6 +27,7 @@
   "turtlebot": {
     "ssh_user": "turtlebot4",
     "host": "192.168.110.174",
+    "command_mode": "local",
     "ssh_port": 22,
     "ros_domain_id": 34,
     "ros_setup": "/opt/ros/humble/setup.bash",
@@ -37,8 +38,8 @@
     "delivery_dwell_sec": 3.0,
     "targets": {
       "HOME": {"x": 0.057, "y": -0.0714, "yaw": 0.0},
-      "A": {"x": 0.718, "y": -1.33, "yaw": 0.0},
-      "B": {"x": -0.0704, "y": -1.32, "yaw": 0.0}
+      "A": {"x": 0.718, "y": -1.33, "yaw": -1.5708},
+      "B": {"x": -0.0704, "y": -1.32, "yaw": -1.5708}
     },
     "connect_timeout_sec": 5
   },
