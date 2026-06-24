@@ -103,11 +103,10 @@ class PickPlaceConfig:
                 (0.0, 0.0, 0.0, 1.0),
             ),
             safe_z_mm=70.0,
-            # 2026-06 hardware calibration: lower pickup 3 mm further after
-            # the second smoke test.  Place car_lower close to the belt, then
-            # place car_upper higher so it stacks on top of car_lower instead
-            # of pressing down at the same conveyor Z.
-            pick_z_mm=-50.0,
+            # 2026-06 hardware calibration: lower pickup 2 mm further after
+            # the latest smoke test.  Place heights stay unchanged: car_lower
+            # close to the belt, car_upper higher for stacking.
+            pick_z_mm=-52.0,
             conveyor_pose_mm=Pose4D(48.2, 196.3, 6.8, 0.0),
             conveyor_retreat_z_mm=70.0,
             object_place_spacing_y_mm=28.0,
