@@ -44,6 +44,13 @@ def test_two_object_pick_place_plan_places_each_object_then_moves_conveyor():
     assert [step.kind for step in plan.steps].count("dobot_pose") == 12
     assert [step.kind for step in plan.steps].count("suction") == 4
     assert plan.steps[5].pose == config.conveyor_pose_for_index(1)
+    assert plan.steps[13].pose == config.conveyor_pose_for_index(2)
+    first_place_pose = plan.steps[5].pose
+    second_place_pose = plan.steps[13].pose
+    assert first_place_pose is not None
+    assert second_place_pose is not None
+    assert second_place_pose.x == pytest.approx(first_place_pose.x)
+    assert second_place_pose.y == pytest.approx(first_place_pose.y)
     assert plan.steps[6].suction_enabled is False
     assert plan.steps[7].pose is not None
     assert plan.steps[7].pose.z == config.conveyor_retreat_z_mm
@@ -58,6 +65,26 @@ def test_project_pill_reference_transform_maps_camera_point_to_robot_xy():
 
     assert x == pytest.approx(253.013, abs=0.01)
     assert y == pytest.approx(-7.593, abs=0.01)
+
+
+def test_reference_pick_and_place_z_values_are_lowered_for_hardware_smoke_test():
+    config = PickPlaceConfig.reference_from_project_pill()
+
+    assert config.pick_z_mm == pytest.approx(-52.0)
+    assert config.conveyor_pose_mm.z == pytest.approx(6.8)
+
+
+def test_car_upper_uses_same_fixed_xy_and_higher_z_for_stack():
+    config = PickPlaceConfig.reference_from_project_pill()
+
+    lower_pose = config.conveyor_pose_for_index(1)
+    upper_pose = config.conveyor_pose_for_index(2)
+
+    assert lower_pose.z == pytest.approx(6.8)
+    assert upper_pose.z == pytest.approx(14.8)
+    assert upper_pose.x == pytest.approx(lower_pose.x)
+    assert upper_pose.y == pytest.approx(lower_pose.y)
+    assert config.object_place_spacing_y_mm == pytest.approx(0.0)
 
 
 def test_pick_place_plan_requires_exactly_two_objects():
@@ -82,7 +109,7 @@ def test_target_callback_work_is_dispatched_off_executor_thread():
         execute_steps,
         statuses.append,
         set_target_color=target_colors.append,
-        target_colors=("yellow", "red"),
+        target_colors=("car_lower", "car_upper"),
     )
 
     started = time.monotonic()
@@ -97,7 +124,7 @@ def test_target_callback_work_is_dispatched_off_executor_thread():
 
     assert coordinator.completed_count == 1
     assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2"]
-    assert target_colors == ["yellow", "red"]
+    assert target_colors == ["car_lower", "car_upper"]
     assert executed_batches[0][0] == "object_1_move_above_pick"
 
 
@@ -115,7 +142,7 @@ def test_second_object_starts_conveyor_after_color_switch():
         execute_steps,
         statuses.append,
         set_target_color=target_colors.append,
-        target_colors=("yellow", "red"),
+        target_colors=("car_lower", "car_upper"),
     )
 
     assert coordinator.accept_target(CameraPoint(20.0, -109.0, 384.0)) is True
@@ -125,7 +152,7 @@ def test_second_object_starts_conveyor_after_color_switch():
 
     assert coordinator.completed_count == 2
     assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2", "COMPLETED_TWO_OBJECT_PICK_PLACE"]
-    assert target_colors == ["yellow", "red"]
+    assert target_colors == ["car_lower", "car_upper"]
     assert executed_batches[-1] == ["sort_conveyor_left_after_quality_pass"]
 
 

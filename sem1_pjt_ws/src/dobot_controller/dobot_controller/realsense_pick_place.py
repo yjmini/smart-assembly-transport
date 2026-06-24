@@ -78,6 +78,7 @@ class PickPlaceConfig:
     conveyor_pose_mm: Pose4D
     conveyor_retreat_z_mm: float
     object_place_spacing_y_mm: float
+    upper_stack_place_lift_mm: float
     color_switch_settle_sec: float = 1.0
     quality_result: str = "normal"
     conveyor_sort_steps: int = 3200
@@ -102,10 +103,17 @@ class PickPlaceConfig:
                 (0.0, 0.0, 0.0, 1.0),
             ),
             safe_z_mm=70.0,
-            pick_z_mm=-39.0,
-            conveyor_pose_mm=Pose4D(48.2, 196.3, 17.8, 0.0),
+            # 2026-06 hardware calibration: lower pickup 2 mm further after
+            # the latest smoke test.  Place heights stay unchanged: car_lower
+            # close to the belt, car_upper higher for stacking.
+            pick_z_mm=-52.0,
+            conveyor_pose_mm=Pose4D(48.2, 196.3, 6.8, 0.0),
             conveyor_retreat_z_mm=70.0,
-            object_place_spacing_y_mm=28.0,
+            # Fixed-coordinate assembly mode: place both objects at one Dobot
+            # XY point. The second object only changes Z so car_upper is
+            # released onto car_lower instead of at a separate conveyor offset.
+            object_place_spacing_y_mm=0.0,
+            upper_stack_place_lift_mm=8.0,
             motion_r=0.0,
         )
 
@@ -120,11 +128,15 @@ class PickPlaceConfig:
         return corrected_x, corrected_y
 
     def conveyor_pose_for_index(self, index: int) -> Pose4D:
-        offset_y = (index - 1) * self.object_place_spacing_y_mm
+        # Fixed-coordinate assembly mode: every place operation uses the same
+        # Dobot X/Y point. `object_place_spacing_y_mm` is kept in the dataclass
+        # for backward compatibility with old config/tests, but production
+        # assembly now targets one calibrated point.
+        stack_lift_z = self.upper_stack_place_lift_mm if index >= 2 else 0.0
         return Pose4D(
             self.conveyor_pose_mm.x,
-            self.conveyor_pose_mm.y + offset_y,
-            self.conveyor_pose_mm.z,
+            self.conveyor_pose_mm.y,
+            self.conveyor_pose_mm.z + stack_lift_z,
             self.conveyor_pose_mm.r,
         )
 
@@ -215,13 +227,15 @@ class ObjectPickPlaceCoordinator:
         publish_status: Callable[[str], None],
         *,
         set_target_color: Callable[[str], None] | None = None,
-        target_colors: tuple[str, ...] = ("yellow", "red"),
+        target_colors: tuple[str, ...] = ("car_lower", "car_upper"),
     ) -> None:
         self.config = config
         self.execute_steps = execute_steps
         self.publish_status = publish_status
+        # The callback name is kept for backward compatibility; in YOLO mode the
+        # published value is a class label such as car_lower/car_upper.
         self.set_target_color = set_target_color or (lambda _color: None)
-        self.target_colors = tuple(color.strip().lower() for color in target_colors if color.strip()) or ("yellow", "red")
+        self.target_colors = tuple(color.strip().lower() for color in target_colors if color.strip()) or ("car_lower", "car_upper")
         self.completed_points: list[CameraPoint] = []
         self.executing = False
         self._ignore_targets_until = 0.0
@@ -298,15 +312,28 @@ class TwoObjectPickPlaceNode:
         quality_result = str(self.node.declare_parameter("quality_result", "normal").value)
         conveyor_sort_steps = int(self.node.declare_parameter("conveyor_sort_steps", 3200).value)
         conveyor_step_delay_sec = float(self.node.declare_parameter("conveyor_step_delay_sec", 0.0001).value)
+        default_config = PickPlaceConfig.reference_from_project_pill()
+        fixed_place_x_mm = float(self.node.declare_parameter("fixed_place_x_mm", default_config.conveyor_pose_mm.x).value)
+        fixed_place_y_mm = float(self.node.declare_parameter("fixed_place_y_mm", default_config.conveyor_pose_mm.y).value)
+        fixed_place_z_mm = float(self.node.declare_parameter("fixed_place_z_mm", default_config.conveyor_pose_mm.z).value)
+        fixed_place_r_deg = float(self.node.declare_parameter("fixed_place_r_deg", default_config.conveyor_pose_mm.r).value)
+        upper_stack_place_lift_mm = float(
+            self.node.declare_parameter("upper_stack_place_lift_mm", default_config.upper_stack_place_lift_mm).value
+        )
         self.config = replace(
-            PickPlaceConfig.reference_from_project_pill(),
+            default_config,
             quality_result=quality_result,
             conveyor_sort_steps=conveyor_sort_steps,
             conveyor_step_delay_sec=conveyor_step_delay_sec,
+            conveyor_pose_mm=Pose4D(fixed_place_x_mm, fixed_place_y_mm, fixed_place_z_mm, fixed_place_r_deg),
+            object_place_spacing_y_mm=0.0,
+            upper_stack_place_lift_mm=upper_stack_place_lift_mm,
         )
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
-        target_colors_param = str(self.node.declare_parameter("target_colors", "yellow,red").value)
-        self.target_colors = tuple(color.strip().lower() for color in target_colors_param.split(",") if color.strip()) or ("yellow", "red")
+        target_colors_param = str(self.node.declare_parameter("target_colors", "car_lower,car_upper").value)
+        # For compatibility with old launch files the parameter is still named
+        # target_colors, but YOLO mode treats these values as class labels.
+        self.target_colors = tuple(color.strip().lower() for color in target_colors_param.split(",") if color.strip()) or ("car_lower", "car_upper")
         self.ptp_action = str(self.node.declare_parameter("ptp_action", "PTP_action").value)
         self.conveyor_command_template = str(self.node.declare_parameter("conveyor_command", "").value)
         self.subscription = self.node.create_subscription(Point, "/target_pixel", self.target_callback, 10)
@@ -378,7 +405,7 @@ class TwoObjectPickPlaceNode:
         msg = String()
         msg.data = color
         self.target_color_pub.publish(msg)
-        self.node.get_logger().info(f"Target color set to {color}")
+        self.node.get_logger().info(f"Target detector value set to {color}")
 
     def send_pose_and_wait(self, target_pose: list[float]) -> None:
         goal_msg = self.PointToPoint.Goal()
