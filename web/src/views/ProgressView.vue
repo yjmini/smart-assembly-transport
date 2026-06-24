@@ -166,5 +166,45 @@ onBeforeUnmount(() => { try { if (window.speechSynthesis) window.speechSynthesis
 
 
 <style>
-.progress-page{padding-top:24px}.workspace-hero{display:grid;grid-template-columns:minmax(280px,1fr) minmax(420px,.8fr) auto;gap:20px;align-items:center;padding:24px 0 28px;border-bottom:1px solid var(--colors-hairline-soft)}.workspace-hero h1{margin:4px 0 6px}.compact-metrics{grid-template-columns:repeat(4,1fr)}.compact-metrics .metric{padding:14px}.compact-metrics .metric b{font-size:30px}.workspace-status{display:grid;gap:8px;justify-items:end}.work-grid{display:grid;grid-template-columns:360px minmax(0,1fr) 390px;grid-template-areas:'command flow timeline' 'vision vision map' 'voice voice map';gap:18px;margin-top:24px}.command-card{grid-area:command}.flow-card{grid-area:flow}.timeline-card{grid-area:timeline}.camera-card{grid-area:vision}.map-card{grid-area:map}.voice-progress{grid-area:voice}.progress-page .stage-strip{grid-template-columns:repeat(6,minmax(0,1fr))}.progress-page .stage{min-height:70px}.progress-page .camera-shell{height:360px}.progress-page #slamMap{height:320px}.progress-page .timeline{max-height:310px}.progress-page .controls{grid-template-columns:1fr}.progress-page .speech-actions{grid-template-columns:1fr auto auto auto}@media(max-width:1180px){.workspace-hero,.work-grid{grid-template-columns:1fr}.work-grid{grid-template-areas:'command' 'flow' 'vision' 'map' 'voice' 'timeline'}.workspace-status{justify-items:start}.compact-metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:720px){.progress-page .stage-strip,.progress-page .speech-actions,.compact-metrics{grid-template-columns:1fr}}
+.progress-page{
+  max-width:1440px;
+  min-height:calc(100vh - 64px);
+  padding-top:12px;
+  padding-bottom:0;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  overflow:hidden;
+}
+.cal-shell.route-progress{min-height:100vh}
+@media(min-width:1181px) and (min-height:800px){
+  .cal-shell.route-progress{height:100vh;overflow:hidden}
+  .route-progress .progress-page{height:calc(100vh - 64px);min-height:0}
+}
+.workspace-hero{
+  display:grid;
+  grid-template-columns:minmax(320px,1fr) minmax(420px,.78fr) auto;
+  gap:16px;
+  align-items:center;
+  padding:10px 0 12px;
+  border-bottom:1px solid var(--colors-hairline-soft);
+}
+.workspace-hero h1{margin:2px 0 4px}.workspace-hero .muted{max-width:760px;margin:0}.compact-metrics{grid-template-columns:repeat(4,1fr)}.compact-metrics .metric{padding:10px 12px}.compact-metrics .metric b{font-size:26px}.workspace-status{display:grid;gap:8px;justify-items:end}
+.work-grid{
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(0,1.35fr) minmax(320px,.9fr);
+  grid-template-rows:auto auto minmax(0,1.25fr) minmax(0,.75fr);
+  grid-template-areas:'command command command' 'flow flow flow' 'vision vision map' 'voice voice timeline';
+  gap:10px;
+  margin-top:10px;
+  align-items:start;
+  overflow:hidden;
+}
+.command-card{grid-area:command}.flow-card{grid-area:flow}.timeline-card{grid-area:timeline}.camera-card{grid-area:vision}.map-card{grid-area:map}.voice-progress{grid-area:voice}
+.progress-page .card,.progress-page .product-mockup-card{min-height:0;padding:14px;overflow:auto}.progress-page .card-title{margin-bottom:10px}.progress-page .controls{grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px}.progress-page .controls select,.progress-page .controls .primary{grid-column:auto}.progress-page .mini-grid{grid-template-columns:minmax(260px,1fr) auto;align-items:center;gap:8px}.progress-page .notice{margin:8px 0 0}.progress-page .flow-card{position:sticky;top:72px;z-index:10;border:1px solid var(--colors-hairline);box-shadow:var(--shadow-elevated);overflow:hidden}
+.progress-page .stage-strip{grid-template-columns:repeat(11,minmax(96px,1fr));gap:8px}.progress-page .stage{min-height:70px;padding:9px;min-width:0}.progress-page .stage .label{word-break:keep-all;overflow-wrap:normal;line-height:1.2}.progress-page .stage .state{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.progress-page .camera-shell{height:clamp(180px,28vh,300px)}.progress-page #slamMap{width:100%;height:clamp(160px,24vh,260px)}.progress-page .timeline{max-height:none;overflow:auto}.progress-page .speech-actions{grid-template-columns:minmax(220px,1fr) auto auto auto}.progress-page .intent-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.progress-page .vision-list{grid-template-columns:repeat(3,minmax(0,1fr))}.progress-page .map-wrap,.progress-page .stt-box{gap:8px;align-content:start}.progress-page .pose-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}.progress-page .pose-row{padding:10px}.progress-page .map-meta{max-height:42px;overflow:hidden}.progress-page .map-tools,.progress-page .camera-tools{grid-template-columns:minmax(180px,1fr) auto;gap:8px;margin-top:8px}
+@media(max-width:1180px){.progress-page{height:auto;overflow:visible}.workspace-hero,.work-grid{grid-template-columns:1fr}.work-grid{grid-template-rows:auto;grid-template-areas:'command' 'flow' 'vision' 'map' 'voice' 'timeline';overflow:visible}.workspace-status{justify-items:start}.compact-metrics{grid-template-columns:repeat(2,1fr)}.progress-page .flow-card{position:static}.progress-page .stage-strip{grid-template-columns:repeat(4,minmax(140px,1fr))}.progress-page .controls{grid-template-columns:repeat(2,minmax(0,1fr))}.progress-page .card,.progress-page .product-mockup-card{overflow:visible}}
+@media(max-width:720px){.progress-page .stage-strip,.progress-page .speech-actions,.compact-metrics,.progress-page .controls,.progress-page .mini-grid,.progress-page .pose-list{grid-template-columns:1fr}.progress-page .stage .state{white-space:normal}}
+
 </style>

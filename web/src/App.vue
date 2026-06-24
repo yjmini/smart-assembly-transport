@@ -1,5 +1,5 @@
 <template>
-  <div class="cal-shell">
+  <div class="cal-shell" :class="`route-${route.name || 'unknown'}`">
     <nav class="top-nav" aria-label="대시보드 주요 메뉴">
       <router-link class="brand" to="/">
         <span class="brand-mark">S</span>
@@ -13,7 +13,7 @@
       <router-link class="button-primary" to="/progress">공정 시작</router-link>
     </nav>
     <router-view />
-    <footer class="footer">
+    <footer v-if="route.name !== 'progress'" class="footer">
       <div>
         <strong>Smart Assembly Transport</strong>
         <p>Vue Router · Chart.js · Django/MySQL · ROS2 · RealSense · TurtleBot · Dobot 운영 UI</p>
@@ -24,6 +24,9 @@
 </template>
 
 <script setup>
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
 </script>
 
 <!-- Dashboard source is in views/ProgressView.vue; snippets kept here for tests: RealSense D435i · YOLO 실시간 화면, SLAM / TurtleBot 위치, Whisper STT / TTS 음성 연동, WebSocket 연결, STT/Mock 작업 시작, 다음 mock 이벤트, 손 감지 / 비상정지, 관리자 Unlock, 실제 order plan 실행, speech.stt.final, hardware.run_order_plan, turtlebot.pose, vision.detections, mapWorldToPixel, parseWhisperIntent, shouldAcceptTurtlePose, new Chart -->
