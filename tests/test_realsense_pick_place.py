@@ -44,6 +44,13 @@ def test_two_object_pick_place_plan_places_each_object_then_moves_conveyor():
     assert [step.kind for step in plan.steps].count("dobot_pose") == 12
     assert [step.kind for step in plan.steps].count("suction") == 4
     assert plan.steps[5].pose == config.conveyor_pose_for_index(1)
+    assert plan.steps[13].pose == config.conveyor_pose_for_index(2)
+    first_place_pose = plan.steps[5].pose
+    second_place_pose = plan.steps[13].pose
+    assert first_place_pose is not None
+    assert second_place_pose is not None
+    assert second_place_pose.x == pytest.approx(first_place_pose.x)
+    assert second_place_pose.y == pytest.approx(first_place_pose.y)
     assert plan.steps[6].suction_enabled is False
     assert plan.steps[7].pose is not None
     assert plan.steps[7].pose.z == config.conveyor_retreat_z_mm
@@ -67,7 +74,7 @@ def test_reference_pick_and_place_z_values_are_lowered_for_hardware_smoke_test()
     assert config.conveyor_pose_mm.z == pytest.approx(6.8)
 
 
-def test_car_upper_places_higher_than_car_lower_for_stack():
+def test_car_upper_uses_same_fixed_xy_and_higher_z_for_stack():
     config = PickPlaceConfig.reference_from_project_pill()
 
     lower_pose = config.conveyor_pose_for_index(1)
@@ -75,7 +82,9 @@ def test_car_upper_places_higher_than_car_lower_for_stack():
 
     assert lower_pose.z == pytest.approx(6.8)
     assert upper_pose.z == pytest.approx(14.8)
-    assert upper_pose.y == pytest.approx(lower_pose.y + config.object_place_spacing_y_mm)
+    assert upper_pose.x == pytest.approx(lower_pose.x)
+    assert upper_pose.y == pytest.approx(lower_pose.y)
+    assert config.object_place_spacing_y_mm == pytest.approx(0.0)
 
 
 def test_pick_place_plan_requires_exactly_two_objects():

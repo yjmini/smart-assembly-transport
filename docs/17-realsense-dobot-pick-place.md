@@ -235,7 +235,7 @@ quality_result:=abnormal → 오른쪽 분류(sort-right)
 10. safe_z로 다시 상승
 11. `/target_color=car_upper`로 두 번째 라벨 전환 후 잠시 대기
 12. 두 번째 /target_pixel 좌표 수신
-13. 같은 순서로 두 번째 물체를 컨베이어에 놓음
+13. 같은 순서로 두 번째 물체를 같은 고정 XY 조립 좌표에 놓음
 14. 품질 결과가 `normal`이면 컨베이어를 길게 구동하면서 왼쪽으로 분류
 15. 품질 결과가 `abnormal`이면 컨베이어를 길게 구동하면서 오른쪽으로 분류
 ```
@@ -244,15 +244,16 @@ quality_result:=abnormal → 오른쪽 분류(sort-right)
 
 `project_pill`의 동작 코드에서 가져온 뒤, 실제 YOLO/Dobot 테스트 피드백을
 반영해 조정한 값입니다. pick은 직전 값보다 2mm 더 낮췄고,
-place 높이는 그대로 유지합니다. `car_lower`는 컨베이어에 낮게 내려놓되 `car_upper`는 `car_lower` 위에
-쌓이도록 더 높은 Z에서 release합니다.
+place 높이는 그대로 유지합니다. `car_lower`와 `car_upper`는 같은 고정 XY 조립 좌표로 이동하고,
+`car_upper`만 `car_lower` 위에 쌓이도록 더 높은 Z에서 release합니다.
 
 ```text
 safe_z_mm = 70.0
 pick_z_mm = -52.0
+fixed_assembly_place_pose = x=48.2, y=196.3, z=6.8, r=0.0
 car_lower_place_pose = x=48.2, y=196.3, z=6.8, r=0.0
-car_upper_place_pose = x=48.2, y=224.3, z=14.8, r=0.0
-object_place_spacing_y_mm = 28.0
+car_upper_place_pose = x=48.2, y=196.3, z=14.8, r=0.0
+object_place_spacing_y_mm = 0.0
 upper_stack_place_lift_mm = 8.0
 ```
 
@@ -265,7 +266,8 @@ upper_stack_place_lift_mm = 8.0
  [0.0,      0.0,      0.0,      1.0]]
 ```
 
-실제 테이블에서는 `pick_z_mm`, `conveyor_place_pose`, `object_place_spacing_y_mm`는 미세 조정이 필요할 수 있습니다.
+실제 테이블에서는 `pick_z_mm`, `fixed_place_x_mm`, `fixed_place_y_mm`, `fixed_place_z_mm`, `upper_stack_place_lift_mm`를 미세 조정할 수 있습니다.
+ROS 실행 시에는 `fixed_place_x_mm`, `fixed_place_y_mm`, `fixed_place_z_mm`, `fixed_place_r_deg`, `upper_stack_place_lift_mm` 파라미터로 고정 조립 좌표를 덮어쓸 수 있습니다.
 
 ## 9. 모니터링
 
@@ -293,6 +295,6 @@ COMPLETED_TWO_OBJECT_PICK_PLACE
 - Dobot workspace 안에 손을 넣지 마세요.
 - 첫 테스트는 suction/높이 보정값을 보수적으로 잡고 진행하세요.
 - `pick_z_mm=-52.0`은 직전 테스트값에서 2mm 더 낮춘 값입니다.
-- `car_lower` place Z는 `6.8`, `car_upper` place Z는 `14.8`입니다. `car_upper`가 `car_lower` 위에 잘 쌓이지 않으면 `upper_stack_place_lift_mm`를 1~2mm씩 조정하세요.
+- `car_lower` place Z는 `6.8`, `car_upper` place Z는 `14.8`입니다. 두 물체의 X/Y는 모두 `x=48.2, y=196.3` 고정 좌표입니다. `car_upper`가 `car_lower` 위에 잘 쌓이지 않으면 먼저 `fixed_place_x_mm/y_mm`을 조정하고, 높이 문제이면 `upper_stack_place_lift_mm`를 1~2mm씩 조정하세요.
 - 컨베이어는 두 번째 물체를 놓은 뒤 한 번만 start됩니다.
 - 비상 상황에서는 Conveyor Pi emergency-stop과 Dobot E-stop을 우선 사용하세요.

@@ -109,7 +109,10 @@ class PickPlaceConfig:
             pick_z_mm=-52.0,
             conveyor_pose_mm=Pose4D(48.2, 196.3, 6.8, 0.0),
             conveyor_retreat_z_mm=70.0,
-            object_place_spacing_y_mm=28.0,
+            # Fixed-coordinate assembly mode: place both objects at one Dobot
+            # XY point. The second object only changes Z so car_upper is
+            # released onto car_lower instead of at a separate conveyor offset.
+            object_place_spacing_y_mm=0.0,
             upper_stack_place_lift_mm=8.0,
             motion_r=0.0,
         )
@@ -125,11 +128,14 @@ class PickPlaceConfig:
         return corrected_x, corrected_y
 
     def conveyor_pose_for_index(self, index: int) -> Pose4D:
-        offset_y = (index - 1) * self.object_place_spacing_y_mm
+        # Fixed-coordinate assembly mode: every place operation uses the same
+        # Dobot X/Y point. `object_place_spacing_y_mm` is kept in the dataclass
+        # for backward compatibility with old config/tests, but production
+        # assembly now targets one calibrated point.
         stack_lift_z = self.upper_stack_place_lift_mm if index >= 2 else 0.0
         return Pose4D(
             self.conveyor_pose_mm.x,
-            self.conveyor_pose_mm.y + offset_y,
+            self.conveyor_pose_mm.y,
             self.conveyor_pose_mm.z + stack_lift_z,
             self.conveyor_pose_mm.r,
         )
@@ -306,11 +312,22 @@ class TwoObjectPickPlaceNode:
         quality_result = str(self.node.declare_parameter("quality_result", "normal").value)
         conveyor_sort_steps = int(self.node.declare_parameter("conveyor_sort_steps", 3200).value)
         conveyor_step_delay_sec = float(self.node.declare_parameter("conveyor_step_delay_sec", 0.0001).value)
+        default_config = PickPlaceConfig.reference_from_project_pill()
+        fixed_place_x_mm = float(self.node.declare_parameter("fixed_place_x_mm", default_config.conveyor_pose_mm.x).value)
+        fixed_place_y_mm = float(self.node.declare_parameter("fixed_place_y_mm", default_config.conveyor_pose_mm.y).value)
+        fixed_place_z_mm = float(self.node.declare_parameter("fixed_place_z_mm", default_config.conveyor_pose_mm.z).value)
+        fixed_place_r_deg = float(self.node.declare_parameter("fixed_place_r_deg", default_config.conveyor_pose_mm.r).value)
+        upper_stack_place_lift_mm = float(
+            self.node.declare_parameter("upper_stack_place_lift_mm", default_config.upper_stack_place_lift_mm).value
+        )
         self.config = replace(
-            PickPlaceConfig.reference_from_project_pill(),
+            default_config,
             quality_result=quality_result,
             conveyor_sort_steps=conveyor_sort_steps,
             conveyor_step_delay_sec=conveyor_step_delay_sec,
+            conveyor_pose_mm=Pose4D(fixed_place_x_mm, fixed_place_y_mm, fixed_place_z_mm, fixed_place_r_deg),
+            object_place_spacing_y_mm=0.0,
+            upper_stack_place_lift_mm=upper_stack_place_lift_mm,
         )
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
         target_colors_param = str(self.node.declare_parameter("target_colors", "car_lower,car_upper").value)
