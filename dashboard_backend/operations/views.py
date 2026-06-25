@@ -1,4 +1,7 @@
 import json
+import os
+from urllib import request as urlrequest
+from urllib.error import URLError, HTTPError
 from pathlib import Path
 from django.http import FileResponse, HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -43,6 +46,46 @@ def dashboard_asset(request: HttpRequest, path: str):
     content_type = "text/javascript" if asset.suffix == ".js" else "text/css" if asset.suffix == ".css" else "application/octet-stream"
     return FileResponse(asset.open("rb"), content_type=content_type)
 
+
+
+OLLAMA_MODEL = os.environ.get("SMART_ASSEMBLY_OLLAMA_MODEL", "llama3.2:3b")
+OLLAMA_CHAT_URL = os.environ.get("SMART_ASSEMBLY_OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
+
+def _chatbot_context() -> dict:
+    recent_orders = list(Order.objects.order_by("-created_at").values("id", "command", "destination", "parts", "status", "created_at")[:5])
+    recent_events = list(FactoryEvent.objects.order_by("-created_at").values("id", "event_type", "state", "payload", "created_at")[:8])
+    return {
+        "metrics": {
+            "orders": Order.objects.count(),
+            "events": FactoryEvent.objects.count(),
+            "vision_detections": VisionDetection.objects.count(),
+            "deliveries": DeliveryResult.objects.filter(success=True).count(),
+            "emergency_stops": EmergencyStopLog.objects.count(),
+        },
+        "recent_orders": recent_orders,
+        "recent_events": recent_events,
+    }
+
+def _ask_ollama(question: str, context: dict) -> str:
+    system = (
+        "너는 자동 조립 공정 및 무인 배송 시스템 대시보드의 한국어 운영 보조 챗봇이다. "
+        "주어진 DB 지표, 최근 주문, 최근 이벤트만 근거로 작업 상태와 결과를 간결하게 설명해라. "
+        "확실하지 않은 실제 하드웨어 상태는 추측하지 말고 대시보드에 기록된 정보 기준이라고 밝혀라."
+    )
+    payload = {
+        "model": OLLAMA_MODEL,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"프로젝트 상태 컨텍스트 JSON:\n{json.dumps(context, ensure_ascii=False, default=str)}\n\n질문: {question}"},
+        ],
+        "options": {"temperature": 0.2},
+    }
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urlrequest.Request(OLLAMA_CHAT_URL, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    with urlrequest.urlopen(req, timeout=25) as res:  # noqa: S310 - local operator Ollama endpoint only
+        data = json.loads(res.read().decode("utf-8"))
+    return (data.get("message") or {}).get("content") or data.get("response") or "응답이 비어 있습니다."
 
 def health(request: HttpRequest) -> JsonResponse:
     engine = connection.settings_dict.get("ENGINE", "").rsplit(".", 1)[-1]
@@ -148,3 +191,23 @@ def seed_demo_data(request: HttpRequest) -> JsonResponse:
             "emergency_stops": EmergencyStopLog.objects.count(),
         },
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def project_chatbot(request: HttpRequest) -> JsonResponse:
+    body = _json_body(request)
+    question = (body.get("message") or body.get("question") or "").strip()
+    if not question:
+        return JsonResponse({"error": "message is required"}, status=400)
+    context = _chatbot_context()
+    try:
+        answer = _ask_ollama(question, context)
+        return JsonResponse({"answer": answer, "model": OLLAMA_MODEL, "context": context})
+    except (URLError, HTTPError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        fallback = (
+            "Ollama 로컬 모델에 연결하지 못했습니다. "
+            f"현재 DB 기준 주문 {context['metrics']['orders']}건, 이벤트 {context['metrics']['events']}건, "
+            f"배송 완료 {context['metrics']['deliveries']}건, 비상정지 {context['metrics']['emergency_stops']}건이 기록되어 있습니다."
+        )
+        return JsonResponse({"answer": fallback, "model": OLLAMA_MODEL, "context": context, "ollama_error": str(exc)}, status=200)

@@ -13,6 +13,31 @@
       <router-link class="button-primary" to="/progress">공정 시작</router-link>
     </nav>
     <router-view />
+    <aside class="project-chatbot" :class="{ open: chatbotOpen }" aria-label="프로젝트 상태 챗봇">
+      <button class="chatbot-fab" type="button" @click="chatbotOpen = !chatbotOpen">
+        <span>AI</span>
+        <b>프로젝트 상태 챗봇</b>
+      </button>
+      <section v-if="chatbotOpen" class="chatbot-panel">
+        <div class="chatbot-head">
+          <div>
+            <strong>프로젝트 상태 챗봇</strong>
+            <small>Ollama llama3.2:3b · 작업 상태/결과 상담</small>
+          </div>
+          <button type="button" @click="chatbotOpen = false">닫기</button>
+        </div>
+        <div class="chatbot-messages">
+          <div v-for="(message, index) in chatbotMessages" :key="index" :class="['chatbot-message', message.role]">
+            <b>{{ message.role === 'user' ? '나' : 'AI' }}</b>
+            <p>{{ message.content }}</p>
+          </div>
+        </div>
+        <form class="chatbot-form" @submit.prevent="askProjectChatbot">
+          <input v-model="chatbotInput" :disabled="chatbotLoading" placeholder="작업 상태나 결과를 물어보세요" />
+          <button type="submit" :disabled="chatbotLoading || !chatbotInput.trim()">{{ chatbotLoading ? '생각 중' : '질문' }}</button>
+        </form>
+      </section>
+    </aside>
     <footer v-if="route.name !== 'progress'" class="footer">
       <div>
         <strong>Smart Assembly Transport</strong>
@@ -24,9 +49,37 @@
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
+const chatbotOpen = ref(false);
+const chatbotInput = ref('');
+const chatbotLoading = ref(false);
+const chatbotMessages = ref([
+  { role: 'assistant', content: '안녕하세요. 현재 DB에 기록된 작업 상태, 최근 이벤트, 배송 결과를 기준으로 답변할게요.' },
+]);
+
+async function askProjectChatbot() {
+  const question = chatbotInput.value.trim();
+  if (!question || chatbotLoading.value) return;
+  chatbotMessages.value.push({ role: 'user', content: question });
+  chatbotInput.value = '';
+  chatbotLoading.value = true;
+  try {
+    const response = await fetch('/api/chatbot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: question }),
+    });
+    const data = await response.json();
+    chatbotMessages.value.push({ role: 'assistant', content: data.answer || data.error || '응답을 받지 못했습니다.' });
+  } catch (error) {
+    chatbotMessages.value.push({ role: 'assistant', content: `챗봇 연결 오류: ${error}` });
+  } finally {
+    chatbotLoading.value = false;
+  }
+}
 </script>
 
 <!-- Dashboard source is in views/ProgressView.vue; snippets kept here for tests: RealSense D435i · YOLO 실시간 화면, SLAM / TurtleBot 위치, Whisper STT / TTS 음성 연동, WebSocket 연결, STT/Mock 작업 시작, 다음 mock 이벤트, 손 감지 / 비상정지, 관리자 Unlock, 실제 order plan 실행, speech.stt.final, hardware.run_order_plan, turtlebot.pose, vision.detections, mapWorldToPixel, parseWhisperIntent, shouldAcceptTurtlePose, new Chart -->
@@ -88,4 +141,6 @@ a{color:inherit;text-decoration:none}.cal-shell{min-height:100vh;background:var(
 .simple-list{display:grid;gap:12px}.simple-row{display:flex;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--colors-hairline-soft)}.simple-row:last-child{border-bottom:0}.code{font-family:var(--font-mono);font-size:13px;color:var(--colors-body)}
 @media(max-width:900px){.top-nav{grid-template-columns:1fr;gap:8px;height:auto;padding:12px 16px}.nav-pill-group{justify-self:stretch}.button-primary{display:none}.footer{flex-direction:column}.page{padding:24px 16px 0}.section-shell{padding:56px 0}}
 @media(max-width:640px){.nav-pill-group{border-radius:16px;flex-wrap:wrap}.category-tab{padding:8px 10px}.display-xl{font-size:32px}.card{padding:20px}}
+
+.project-chatbot{position:fixed;right:22px;bottom:22px;z-index:50;display:grid;justify-items:end;gap:10px;pointer-events:none}.project-chatbot>*{pointer-events:auto}.chatbot-fab{height:52px;border:0;border-radius:9999px;background:#111;color:#fff;box-shadow:var(--shadow-elevated);display:flex;align-items:center;gap:10px;padding:0 18px;cursor:pointer}.chatbot-fab span{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#3b82f6;font-weight:800}.chatbot-fab b{font-size:14px}.chatbot-panel{width:min(380px,calc(100vw - 28px));height:min(520px,calc(100vh - 110px));background:#fff;border:1px solid var(--colors-hairline);border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,.18);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.chatbot-head{display:flex;justify-content:space-between;gap:12px;align-items:start;padding:14px 16px;border-bottom:1px solid var(--colors-hairline-soft);background:var(--colors-surface-soft)}.chatbot-head strong,.chatbot-head small{display:block}.chatbot-head small{margin-top:2px;color:var(--colors-muted);font-size:12px}.chatbot-head button{border:1px solid var(--colors-hairline);background:#fff;border-radius:8px;height:30px;padding:0 10px}.chatbot-messages{padding:14px;overflow:auto;display:flex;flex-direction:column;gap:10px}.chatbot-message{max-width:88%;border-radius:14px;padding:10px 12px;background:var(--colors-surface-card);align-self:flex-start}.chatbot-message.user{background:#111;color:#fff;align-self:flex-end}.chatbot-message b{display:block;font-size:11px;margin-bottom:4px;opacity:.72}.chatbot-message p{margin:0;white-space:pre-wrap;font-size:13px;line-height:1.45}.chatbot-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:12px;border-top:1px solid var(--colors-hairline-soft)}.chatbot-form input{height:40px;border:1px solid var(--colors-hairline);border-radius:10px;padding:0 12px;font:inherit}.chatbot-form button{height:40px;border:0;border-radius:10px;background:#111;color:#fff;font-weight:700;padding:0 14px}.chatbot-form button:disabled{opacity:.45}@media(max-width:640px){.project-chatbot{right:12px;bottom:12px}.chatbot-fab b{display:none}.chatbot-panel{height:min(480px,calc(100vh - 90px))}}
 </style>
