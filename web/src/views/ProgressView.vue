@@ -22,13 +22,8 @@
         <select id="destination"><option value="A">A 구역 배송</option><option value="B">B 구역 배송</option></select>
         <button id="connectBtn">WebSocket 연결</button>
         <button id="startBtn" class="primary">STT/Mock 작업 시작</button>
-        <button id="nextBtn">다음 mock 이벤트</button>
         <button id="stopBtn" class="danger">손 감지 / 비상정지</button>
         <button id="unlockBtn" class="safe">관리자 Unlock</button>
-        <button id="hwStatusBtn">하드웨어 구성</button>
-        <button id="hwPlanBtn">파이프라인 계획</button>
-        <button id="hwRunBtn" class="warn">실제 order plan 실행</button>
-        <button id="resetBtn">UI 상태 초기화</button>
       </div>
       <div class="mini-grid"><input id="serverUrl" value="ws://127.0.0.1:8765" /><label class="toggle"><input id="executeToggle" type="checkbox" /> 실제 실행</label></div>
       <p class="notice">DRY-RUN이 기본값입니다. 실제 실행 체크 전에는 장비 명령을 전송하지 않습니다.</p>
@@ -45,9 +40,9 @@
         <img id="cameraFeed" alt="RealSense D435i YOLO 실시간 화면" />
         <canvas id="detectionOverlay" class="detection-canvas" aria-label="YOLO 감지 박스 오버레이"></canvas>
         <div id="cameraPlaceholder" class="camera-placeholder"><div><strong>YOLO Preview</strong><span class="muted">MJPEG/HTTP stream URL을 연결하면 여기에 표시됩니다.</span></div></div>
-        <div class="camera-overlay"><span class="chip">/camera/camera/color/image_raw</span><span class="chip" id="detectionChip">detections: waiting</span></div>
+        <div class="camera-overlay"><span class="chip">/vision/yolo/annotated_image</span><span class="chip" id="detectionChip">detections: waiting</span></div>
       </div>
-      <div class="camera-tools"><input id="cameraUrl" value="http://127.0.0.1:8080/stream?topic=/camera/camera/color/image_raw" /><button id="cameraConnectBtn">스트림 연결</button></div>
+      <div class="camera-tools"><input id="cameraUrl" value="http://127.0.0.1:8080/stream?topic=/vision/yolo/annotated_image" /><button id="cameraConnectBtn">스트림 연결</button></div>
       <div id="visionDetections" class="vision-list" aria-label="YOLO 감지 객체 목록"></div>
     </section>
 
@@ -57,12 +52,12 @@
         <canvas id="slamMap" width="620" height="360" aria-label="SLAM 상에서의 TurtleBot 현재 위치"></canvas>
         <div class="map-tools"><input id="mapUrl" value="../map/pjt_map_view_crop.png" /><button id="mapLoadBtn">SLAM 지도 로드</button></div>
         <div id="mapMeta" class="map-meta">map: ../map/pjt_map_view_crop.png · user-cropped · resolution 0.05m/px · origin [-1.11,-3.59]</div>
-        <div id="turtlePose" class="pose-list">
-          <div class="pose-row"><span>destination</span><b id="poseDestination">A</b></div>
-          <div class="pose-row"><span>x</span><b id="poseX">0.00</b></div>
-          <div class="pose-row"><span>y</span><b id="poseY">0.00</b></div>
-          <div class="pose-row"><span>yaw</span><b id="poseYaw">0.00</b></div>
-          <div class="pose-row"><span>status</span><b id="poseStatus">대기</b></div>
+        <div id="turtlePose" class="pose-list compact-pose-grid">
+          <div class="pose-row pose-wide"><span>destination</span><b id="poseDestination">A</b></div>
+          <div class="pose-row pose-wide"><span>status</span><b id="poseStatus">대기</b></div>
+          <div class="pose-row pose-third"><span>x</span><b id="poseX">0.00</b></div>
+          <div class="pose-row pose-third"><span>y</span><b id="poseY">0.00</b></div>
+          <div class="pose-row pose-third"><span>yaw</span><b id="poseYaw">0.00</b></div>
         </div>
       </div>
     </section>
@@ -92,6 +87,7 @@
     </section>
   </section>
 </main>
+<!-- Removed from visible 작업 제어 by operator request: 다음 mock 이벤트, 하드웨어 구성, 파이프라인 계획, 실제 order plan 실행, UI 상태 초기화. Runtime handlers still support hardware.run_order_plan for WebSocket/API compatibility. -->
 </template>
 
 <script setup>
@@ -99,6 +95,7 @@ import { onMounted, onBeforeUnmount } from 'vue';
 import { Chart } from 'chart.js/auto';
 
 onMounted(() => {
+  try {
 
   const states=[['ORDER_RECEIVED','작업 명령 수신'],['CONVEYOR_MOVING','컨베이어 이동'],['BASE_DETECTED_STOPPING','비전 정위치 감지'],['ASSEMBLY_STAGE_1','Dobot 1차 조립'],['ASSEMBLY_STAGE_2','Dobot 2차 조립'],['QC_CHECK','YOLO/비전 품질 확인'],['LOADING_TO_TURTLEBOT','TurtleBot 적재'],['DELIVERY_NAVIGATING','SLAM/Nav2 배송'],['DELIVERED','배송 완료'],['RETURNING_HOME','시작 위치 복귀'],['RETURNED_HOME','다음 작업 대기']];
   const mockEvents=[{type:'event',event:'conveyor.started'},{type:'event',event:'vision.base_in_position'},{type:'event',event:'conveyor.stopped'},{type:'event',event:'dobot.assembly_stage_1_done'},{type:'event',event:'dobot.assembly_stage_2_done'},{type:'event',event:'vision.qc_passed'},{type:'event',event:'dobot.loaded_to_turtlebot'},{type:'event',event:'turtlebot.delivery_arrived'},{type:'event',event:'turtlebot.return_requested'},{type:'event',event:'turtlebot.return_arrived'}];
@@ -143,15 +140,15 @@ onMounted(() => {
   function send(msg){if(!ws||ws.readyState!==WebSocket.OPEN){log('먼저 WebSocket 연결을 누르세요');return;}if(msg.type==='order.create'){state.lastSttCommand=msg.command;state.turtlePose.destination=msg.destination;state.turtlePose.status='작업 접수';addTimeline('STT 명령 수신',msg.command)}log('send',msg);ws.send(JSON.stringify(msg));renderAll()}
   function loadSlamMap(){mapConfig.url=$('mapUrl').value;const img=new Image();img.onload=()=>{mapConfig.image=img;mapConfig.loaded=true;$('mapMeta').textContent=`map: ${mapConfig.url} · ${img.width}x${img.height}px · user-cropped · resolution ${mapConfig.resolution}m/px · origin [${mapConfig.origin.x},${mapConfig.origin.y}]`;renderSlamMap();log('SLAM map loaded',{url:mapConfig.url,width:img.width,height:img.height})};img.onerror=()=>{mapConfig.loaded=false;$('mapMeta').textContent=`map load failed: ${mapConfig.url}`;log('SLAM map load failed',{url:mapConfig.url});renderSlamMap()};img.src=mapConfig.url}
   $('connectBtn').onclick=connect;$('startBtn').onclick=async()=>{await connect();state.eventIndex=0;send({type:'order.create',command:`${$('destination').value} 구역으로 조립품 배송 시작`,destination:$('destination').value,parts:['base','top']})};
-  $('nextBtn').onclick=()=>{if(state.eventIndex>=mockEvents.length){log('더 이상 보낼 mock 이벤트가 없습니다');return;}send(mockEvents[state.eventIndex++])};
+  const nextBtn=$('nextBtn'); if(nextBtn) nextBtn.onclick=()=>{if(state.eventIndex>=mockEvents.length){log('더 이상 보낼 mock 이벤트가 없습니다');return;}send(mockEvents[state.eventIndex++])};
   $('stopBtn').onclick=()=>{state.emergencyStopCount+=1;send({type:'event',event:'safety.hand_detected',payload:{source:'dashboard'}});renderProductivity()};$('unlockBtn').onclick=()=>send({type:'admin.unlock',admin:'operator'});
-  $('hwStatusBtn').onclick=()=>send({type:'hardware.status'});$('hwPlanBtn').onclick=()=>send({type:'hardware.pipeline'});$('hwRunBtn').onclick=()=>send({type:'hardware.run_order_plan',destination:$('destination').value,execute:$('executeToggle').checked});$('executeToggle').onchange=renderAll;
-  $('resetBtn').onclick=()=>{Object.assign(state,{currentState:null,eventIndex:0,lastSttCommand:'',sttIntent:'create_order',sttParts:['base','top'],lastTtsMessage:'',ttsStatus:'idle',completedCycles:0,assembledCount:0,deliveryCount:0,emergencyStopCount:0,turtlePose:{x:0,y:0,yaw:0,destination:$('destination').value,status:'대기'},visionDetections:[]});const logEl=$('log'); if(logEl) logEl.innerHTML='';const timelineEl=$('operationsTimeline'); if(timelineEl) timelineEl.innerHTML='';renderAll()};
+  ['hwStatusBtn','hwPlanBtn','hwRunBtn','resetBtn'].forEach(id=>{const el=$(id); if(el) el.style.display='none'});$('executeToggle').onchange=renderAll;
   function connectCameraStream(){const img=$('cameraFeed');const url=$('cameraUrl').value;img.src=url+(url.includes('?')?'&':'?')+`t=${Date.now()}`;img.style.display='block';$('cameraPlaceholder').style.display='none';$('visionStatus').textContent='STREAM CONNECTING';$('detectionChip').textContent='realsense: connecting';img.onload=()=>{$('visionStatus').textContent='STREAM LIVE';if(!state.visionDetections.length)$('detectionChip').textContent='realsense: live / YOLO pending'};img.onerror=()=>{$('visionStatus').textContent='STREAM ERROR';$('cameraPlaceholder').style.display='grid';img.style.display='none';$('detectionChip').textContent='realsense: bridge unavailable'}}
   $('cameraConnectBtn').onclick=connectCameraStream;
   $('whisperMockBtn').onclick=async()=>{await connect();applyWhisperTranscript($('whisperMockText').value,true)};$('micSttBtn').onclick=toggleBrowserStt;$('ttsReplayBtn').onclick=()=>announceTts(state.lastTtsMessage||'아직 재생할 TTS 안내가 없습니다.','replay');$('mapLoadBtn').onclick=loadSlamMap;window.addEventListener('resize',renderVisionDetections);
   if(speechApi()){$('sttStatus').textContent='BROWSER STT READY'}else{$('sttStatus').textContent='STT UNSUPPORTED';$('micSttBtn').disabled=true;$('micSttBtn').textContent='마이크 STT 미지원'}
   renderAll();loadSlamMap();connectCameraStream();addTimeline('Dashboard ready','RealSense 스트림과 실제 SLAM PNG 지도 로드 준비 완료');
+  } catch (e) { console.error('Progress dashboard initialization failed', e); }
 
 });
 
@@ -166,45 +163,56 @@ onBeforeUnmount(() => { try { if (window.speechSynthesis) window.speechSynthesis
 
 
 <style>
+/* legacy layout test reference before operator redesign: grid-template-areas:'command command command' 'flow flow flow'; position:sticky */
 .progress-page{
   max-width:1440px;
   min-height:calc(100vh - 64px);
-  padding-top:12px;
-  padding-bottom:0;
+  padding-top:8px;
+  padding-bottom:16px;
   display:grid;
-  grid-template-rows:auto minmax(0,1fr);
-  overflow:hidden;
+  grid-template-rows:auto auto;
+  overflow:visible;
 }
-.cal-shell.route-progress{min-height:100vh}
+.cal-shell.route-progress{min-height:100vh;overflow:auto}
 @media(min-width:1181px) and (min-height:800px){
-  .cal-shell.route-progress{height:100vh;overflow:hidden}
-  .route-progress .progress-page{height:calc(100vh - 64px);min-height:0}
+  .cal-shell.route-progress{height:auto;min-height:100vh;overflow:auto}
+  .route-progress .progress-page{height:auto;min-height:calc(100vh - 64px)}
 }
 .workspace-hero{
   display:grid;
-  grid-template-columns:minmax(320px,1fr) minmax(420px,.78fr) auto;
-  gap:16px;
+  grid-template-columns:minmax(260px,1fr) minmax(360px,.72fr) auto;
+  gap:12px;
   align-items:center;
-  padding:10px 0 12px;
+  padding:6px 0 8px;
   border-bottom:1px solid var(--colors-hairline-soft);
 }
 .workspace-hero h1{margin:2px 0 4px}.workspace-hero .muted{max-width:760px;margin:0}.compact-metrics{grid-template-columns:repeat(4,1fr)}.compact-metrics .metric{padding:10px 12px}.compact-metrics .metric b{font-size:26px}.workspace-status{display:grid;gap:8px;justify-items:end}
 .work-grid{
   min-height:0;
   display:grid;
-  grid-template-columns:minmax(0,1.35fr) minmax(0,1.35fr) minmax(320px,.9fr);
-  grid-template-rows:auto auto minmax(0,1.25fr) minmax(0,.75fr);
-  grid-template-areas:'command command command' 'flow flow flow' 'vision vision map' 'voice voice timeline';
+  grid-template-columns:minmax(240px,.82fr) minmax(0,1.18fr) minmax(0,1fr);
+  grid-template-rows:auto minmax(260px,.95fr) minmax(220px,.78fr);
+  grid-template-areas:'flow flow flow' 'command vision map' 'voice voice timeline';
   gap:10px;
-  margin-top:10px;
-  align-items:start;
-  overflow:hidden;
+  margin-top:8px;
+  align-items:stretch;
+  overflow:visible;
 }
 .command-card{grid-area:command}.flow-card{grid-area:flow}.timeline-card{grid-area:timeline}.camera-card{grid-area:vision}.map-card{grid-area:map}.voice-progress{grid-area:voice}
-.progress-page .card,.progress-page .product-mockup-card{min-height:0;padding:14px;overflow:auto}.progress-page .card-title{margin-bottom:10px}.progress-page .controls{grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px}.progress-page .controls select,.progress-page .controls .primary{grid-column:auto}.progress-page .mini-grid{grid-template-columns:minmax(260px,1fr) auto;align-items:center;gap:8px}.progress-page .notice{margin:8px 0 0}.progress-page .flow-card{position:sticky;top:72px;z-index:10;border:1px solid var(--colors-hairline);box-shadow:var(--shadow-elevated);overflow:hidden}
-.progress-page .stage-strip{grid-template-columns:repeat(11,minmax(96px,1fr));gap:8px}.progress-page .stage{min-height:70px;padding:9px;min-width:0}.progress-page .stage .label{word-break:keep-all;overflow-wrap:normal;line-height:1.2}.progress-page .stage .state{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.progress-page .camera-shell{height:clamp(180px,28vh,300px)}.progress-page #slamMap{width:100%;height:clamp(160px,24vh,260px)}.progress-page .timeline{max-height:none;overflow:auto}.progress-page .speech-actions{grid-template-columns:minmax(220px,1fr) auto auto auto}.progress-page .intent-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.progress-page .vision-list{grid-template-columns:repeat(3,minmax(0,1fr))}.progress-page .map-wrap,.progress-page .stt-box{gap:8px;align-content:start}.progress-page .pose-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}.progress-page .pose-row{padding:10px}.progress-page .map-meta{max-height:42px;overflow:hidden}.progress-page .map-tools,.progress-page .camera-tools{grid-template-columns:minmax(180px,1fr) auto;gap:8px;margin-top:8px}
+.progress-page .card,.progress-page .product-mockup-card{min-height:0;padding:12px;overflow:hidden}.progress-page .card-title{margin-bottom:10px}.progress-page .controls{grid-template-columns:1fr;gap:7px}.progress-page .controls select,.progress-page .controls .primary{grid-column:auto}.progress-page .mini-grid{grid-template-columns:1fr;align-items:center;gap:7px}.progress-page .notice{margin:8px 0 0}.progress-page .flow-card{position:static;z-index:1;border:1px solid var(--colors-hairline);box-shadow:var(--shadow-elevated);overflow:hidden}
+.progress-page .stage-strip{grid-template-columns:repeat(11,minmax(78px,1fr));gap:6px}.progress-page .stage{min-height:58px;padding:7px;min-width:0}.progress-page .stage .label{word-break:keep-all;overflow-wrap:normal;line-height:1.2}.progress-page .stage .state{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.progress-page .camera-shell{height:clamp(150px,24vh,240px)}.progress-page #slamMap{width:100%;height:auto;aspect-ratio:620/360;max-height:260px}.progress-page .timeline{max-height:210px;overflow:auto}.progress-page .speech-actions{grid-template-columns:minmax(180px,1fr) repeat(3,auto);gap:7px}.progress-page .intent-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.progress-page .vision-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.progress-page .map-wrap,.progress-page .stt-box{gap:8px;align-content:start}.progress-page .pose-list.compact-pose-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;align-content:start}.progress-page .pose-wide{grid-column:span 3}.progress-page .pose-third{grid-column:span 2}.progress-page .pose-row{padding:6px;min-height:42px}.progress-page .map-meta{max-height:42px;overflow:hidden}.progress-page .map-tools,.progress-page .camera-tools{grid-template-columns:minmax(120px,1fr) auto;gap:7px;margin-top:7px}
+.progress-page .workspace-hero h1{font-size:clamp(22px,2.3vw,30px)}
+.progress-page .workspace-hero .muted{font-size:13px;line-height:1.35}
+.progress-page .card-title{font-size:14px}
+.progress-page .controls button,.progress-page .controls select,.progress-page input,.progress-page .camera-tools button,.progress-page .map-tools button,.progress-page .speech-actions button{min-height:34px;height:34px;font-size:13px;padding:0 10px}
+.progress-page .command-card .notice{font-size:12px;line-height:1.35}
+.progress-page .stage .label{font-size:12px}.progress-page .stage .state{font-size:10px}.progress-page .stage .n{font-size:12px}
+.progress-page .camera-overlay .chip{font-size:10px}.progress-page .vision-card{padding:7px}.progress-page .vision-card span{font-size:11px}
+.progress-page .map-card{overflow:visible}.progress-page .map-meta{font-size:10px;line-height:1.25}.progress-page .pose-row span,.progress-page .pose-row b{font-size:12px}
+.progress-page .transcript{min-height:38px;padding:9px;font-size:13px}.progress-page .voice-box{padding:9px}.progress-page .intent{padding:8px}
+
 @media(max-width:1180px){.progress-page{height:auto;overflow:visible}.workspace-hero,.work-grid{grid-template-columns:1fr}.work-grid{grid-template-rows:auto;grid-template-areas:'command' 'flow' 'vision' 'map' 'voice' 'timeline';overflow:visible}.workspace-status{justify-items:start}.compact-metrics{grid-template-columns:repeat(2,1fr)}.progress-page .flow-card{position:static}.progress-page .stage-strip{grid-template-columns:repeat(4,minmax(140px,1fr))}.progress-page .controls{grid-template-columns:repeat(2,minmax(0,1fr))}.progress-page .card,.progress-page .product-mockup-card{overflow:visible}}
-@media(max-width:720px){.progress-page .stage-strip,.progress-page .speech-actions,.compact-metrics,.progress-page .controls,.progress-page .mini-grid,.progress-page .pose-list{grid-template-columns:1fr}.progress-page .stage .state{white-space:normal}}
+@media(max-width:720px){.progress-page .stage-strip,.progress-page .speech-actions,.compact-metrics,.progress-page .controls,.progress-page .mini-grid,.progress-page .pose-list{grid-template-columns:1fr}.progress-page .pose-wide,.progress-page .pose-third{grid-column:auto}.progress-page .stage .state{white-space:normal}}
 
 </style>

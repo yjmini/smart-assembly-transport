@@ -4,6 +4,8 @@ from sem1_pjt_ws.src.vision_detector.vision_detector.realsense_detector import (
     HsvRange,
     RealSenseIntrinsics,
     YoloDetection,
+    build_vision_detections_message,
+    draw_yolo_detections,
     deproject_pixel_to_camera_mm,
     detect_largest_colored_depth_point,
     detect_largest_colored_depth_point_by_color,
@@ -116,3 +118,28 @@ def test_yolo_depth_detection_returns_center_3d_point_and_label():
     assert detection.confidence == pytest.approx(0.88, abs=0.001)
     assert detection.pixel == (50, 60)
     assert detection.camera_point_mm == pytest.approx((-30.0, 0.0, 500.0), abs=0.01)
+
+
+def test_build_vision_detections_message_uses_dashboard_bbox_schema():
+    detections = [YoloDetection("car_lower", 0.87654, (10, 20, 80, 100))]
+
+    payload = build_vision_detections_message(detections, image_shape=(480, 640), stamp=123.4)
+
+    assert payload["type"] == "vision.detections"
+    assert payload["stamp"] == 123.4
+    assert payload["detections"][0]["label"] == "car_lower"
+    assert payload["detections"][0]["confidence"] == 0.8765
+    assert payload["detections"][0]["bbox"] == {"x": 10.0, "y": 20.0, "w": 70.0, "h": 80.0}
+    assert payload["detections"][0]["image_width"] == 640
+    assert payload["detections"][0]["image_height"] == 480
+
+
+def test_draw_yolo_detections_changes_pixels_inside_bbox():
+    import numpy as np
+
+    bgr = np.zeros((120, 160, 3), dtype=np.uint8)
+    annotated = draw_yolo_detections(bgr, [YoloDetection("car_lower", 0.88, (20, 30, 80, 90))], target_label="car_lower")
+
+    assert annotated.shape == bgr.shape
+    assert annotated.sum() > 0
+    assert annotated[28:34, 18:24].sum() > 0

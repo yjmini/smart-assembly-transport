@@ -11,11 +11,15 @@ cd /home/ssafy/smart-assembly-transport
 python3 -m server.app
 ```
 
-터미널 2 — RealSense MJPEG 브릿지:
+터미널 2 — YOLO detector + annotated MJPEG 브릿지:
 
 ```bash
 cd /home/ssafy/smart-assembly-transport
-scripts/start_realsense_stream.sh
+# /vision/yolo/annotated_image + /vision/detections 토픽 발행
+scripts/start_yolo_detector.sh
+
+# 다른 터미널에서 /vision/yolo/annotated_image를 UI용 MJPEG로 변환
+scripts/start_yolo_annotated_stream.sh
 ```
 
 터미널 3 — TurtleBot pose WebSocket 브릿지:
@@ -49,7 +53,7 @@ http://127.0.0.1:3001/web/index.html
 
 ## 운영 화면 구성
 
-- `RealSense D435i · YOLO 실시간 화면`: `scripts/start_realsense_stream.sh`가 `/camera/camera/color/image_raw`를 `http://127.0.0.1:8080/stream?topic=/camera/camera/color/image_raw` MJPEG로 브릿지합니다. 기본은 raw `sensor_msgs/Image`입니다. compressed 토픽이 따로 있을 때만 `REALSENSE_COLOR_TOPIC=/camera/camera/color/image_raw/compressed REALSENSE_COMPRESSED=1 scripts/start_realsense_stream.sh`처럼 실행합니다. Fast DDS shared-memory lock 경고는 토픽 데이터가 나오면 무시해도 되며, 정말 통신이 막힐 때만 `USE_FASTDDS_NO_SHM=1`로 UDP-only 프로파일을 적용하세요. 대시보드는 기본으로 이 URL을 자동 연결하고, `vision.detections` 또는 `vision.detection` WebSocket 메시지를 받으면 bounding box와 객체 목록을 실시간 오버레이합니다.
+- `RealSense D435i · YOLO 실시간 화면`: `scripts/start_yolo_detector.sh`가 RealSense color/depth/camera_info와 YOLOv5 `best.pt`를 사용해 바운딩박스가 그려진 `sensor_msgs/Image` 토픽 `/vision/yolo/annotated_image`와 JSON 검출 토픽 `/vision/detections`를 발행합니다. `scripts/start_yolo_annotated_stream.sh`는 `/vision/yolo/annotated_image`를 `http://127.0.0.1:8080/stream?topic=/vision/yolo/annotated_image` MJPEG로 브릿지하고, 대시보드는 기본으로 이 URL을 자동 연결합니다. 원본 카메라만 보고 싶으면 `scripts/start_realsense_stream.sh` 또는 `REALSENSE_COLOR_TOPIC=/camera/camera/color/image_raw scripts/start_realsense_stream.sh`를 사용하세요. compressed 토픽이 따로 있을 때만 `REALSENSE_COLOR_TOPIC=/camera/camera/color/image_raw/compressed REALSENSE_COMPRESSED=1 scripts/start_realsense_stream.sh`처럼 실행합니다. Fast DDS shared-memory lock 경고는 토픽 데이터가 나오면 무시해도 되며, 정말 통신이 막힐 때만 `USE_FASTDDS_NO_SHM=1`로 UDP-only 프로파일을 적용하세요. 대시보드는 `vision.detections` 또는 `vision.detection` WebSocket 메시지도 받으면 canvas 오버레이와 객체 목록을 갱신합니다.
 - `SLAM / TurtleBot 위치`: `map/pjt_map.pgm`에서 만든 지도 중 사용자가 직접 잘라낸 `map/pjt_map_view_crop.png`를 기본으로 로드합니다. `scripts/start_turtlebot_pose_bridge.sh`가 `/amcl_pose`를 구독해 `turtlebot.pose` WebSocket 메시지로 broadcast하면 하늘색 화살표가 실시간 TurtleBot pose를 따라 움직입니다. 초록색 원은 HOME, 빨간색 A 원/파란색 B 원은 사용자가 지정한 배송 목적지를 표시합니다. 다른 PNG 지도를 쓰려면 지도 URL 입력칸을 바꾸고 `SLAM 지도 로드`를 누르세요.
 - `전체 진행상황`: 조립·검사·적재·배송·복귀 단계별 상태를 표시합니다.
 - `STT 명령 확인`: 텍스트 입력은 테스트용 mock이고, `마이크 STT 시작` 버튼은 브라우저의 `SpeechRecognition` / `webkitSpeechRecognition` API로 로컬 컴퓨터 마이크를 사용합니다. `실제 실행` 토글이 꺼져 있으면 최종 인식 문장은 dry-run/order 확인용으로 처리하고, 토글이 켜져 있으면 `speech.stt.final`에 `execute:true`를 실어 서버가 TurtleBot Nav2 목표를 실제로 전송합니다. `http://127.0.0.1:3001` 같은 localhost 접속에서는 마이크 권한 요청이 동작합니다.
