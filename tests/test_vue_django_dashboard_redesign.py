@@ -97,3 +97,27 @@ def test_django_declares_seed_demo_endpoint_for_dummy_db_data():
     assert "seed_demo_data" in views
     for model_name in ["Order", "FactoryEvent", "VisionDetection", "DeliveryResult", "EmergencyStopLog"]:
         assert model_name in views
+
+
+def test_ollama_chatbot_endpoint_and_floating_widget_are_declared():
+    urls = read("dashboard_backend/operations/urls.py")
+    views = read("dashboard_backend/operations/views.py")
+    app = read("web/src/App.vue")
+
+    assert "api/chatbot" in urls
+    assert "project_chatbot" in views
+    assert "OLLAMA_MODEL" in views
+    assert "llama3.2:3b" in views
+    assert "http://127.0.0.1:11434/api/chat" in views
+    assert "recent_orders" in views
+    assert "recent_events" in views
+
+    for snippet in [
+        "프로젝트 상태 챗봇",
+        "chatbot-fab",
+        "chatbot-panel",
+        "askProjectChatbot",
+        "fetch('/api/chatbot'",
+        "작업 상태나 결과를 물어보세요",
+    ]:
+        assert snippet in app
