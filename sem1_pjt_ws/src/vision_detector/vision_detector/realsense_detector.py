@@ -8,6 +8,7 @@ legacy HSV color thresholding or a custom YOLOv5 `best.pt`; publish a
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -33,6 +34,7 @@ class DepthDetection:
     area: float
     label: str | None = None
     confidence: float | None = None
+    bbox_xyxy: tuple[float, float, float, float] | None = None
 
 @dataclass(frozen=True)
 class YoloDetection:
@@ -125,10 +127,12 @@ def detect_largest_colored_depth_point(
     depth_mm = median_depth_near_pixel(depth_image, u, v)
     if depth_mm <= 0:
         return None
+    x, y, w, h = cv2.boundingRect(contour)
     return DepthDetection(
         pixel=(u, v),
         camera_point_mm=deproject_pixel_to_camera_mm(u, v, depth_mm, intrinsics),
         area=float(cv2.contourArea(contour)),
+        bbox_xyxy=(float(x), float(y), float(x + w), float(y + h)),
     )
 
 
@@ -157,10 +161,12 @@ def detect_largest_colored_depth_point_by_color(
     depth_mm = median_depth_near_pixel(depth_image, u, v)
     if depth_mm <= 0:
         return None
+    x, y, w, h = cv2.boundingRect(contour)
     return DepthDetection(
         pixel=(u, v),
         camera_point_mm=deproject_pixel_to_camera_mm(u, v, depth_mm, intrinsics),
         area=float(cv2.contourArea(contour)),
+        bbox_xyxy=(float(x), float(y), float(x + w), float(y + h)),
     )
 
 
@@ -244,7 +250,61 @@ def detect_largest_yolo_depth_point(
         area=detection.area,
         label=detection.label,
         confidence=detection.confidence,
+        bbox_xyxy=detection.bbox_xyxy,
     )
+
+
+def yolo_detection_to_dashboard_dict(detection: YoloDetection, *, depth_mm: float | None = None, image_shape: tuple[int, int] | None = None) -> dict[str, Any]:
+    x1, y1, x2, y2 = detection.bbox_xyxy
+    payload: dict[str, Any] = {
+        "label": detection.label,
+        "confidence": round(float(detection.confidence), 4),
+        "bbox": {"x": float(x1), "y": float(y1), "w": float(x2 - x1), "h": float(y2 - y1)},
+        "bbox_xyxy": [float(x1), float(y1), float(x2), float(y2)],
+    }
+    if depth_mm is not None and depth_mm > 0:
+        payload["depth_mm"] = float(depth_mm)
+    if image_shape is not None:
+        height, width = image_shape[:2]
+        payload["image_width"] = int(width)
+        payload["image_height"] = int(height)
+    return payload
+
+
+def build_vision_detections_message(
+    detections: Sequence[YoloDetection],
+    *,
+    image_shape: tuple[int, int] | None = None,
+    frame_id: str = "camera_color_optical_frame",
+    stamp: float | None = None,
+) -> dict[str, Any]:
+    return {
+        "type": "vision.detections",
+        "frame_id": frame_id,
+        "stamp": stamp,
+        "detections": [yolo_detection_to_dashboard_dict(d, image_shape=image_shape) for d in detections],
+    }
+
+
+def draw_yolo_detections(bgr_image: Any, detections: Sequence[YoloDetection], *, target_label: str = "") -> Any:
+    import cv2
+
+    annotated = bgr_image.copy()
+    for index, detection in enumerate(detections):
+        x1, y1, x2, y2 = [int(round(v)) for v in detection.bbox_xyxy]
+        color = [(56, 189, 248), (16, 185, 129), (245, 158, 11), (239, 68, 68)][index % 4]
+        # RGB design tokens converted approximately to BGR for OpenCV drawing.
+        bgr_color = (color[2], color[1], color[0])
+        thickness = 3 if detection.label.lower() == target_label.lower() else 2
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), bgr_color, thickness)
+        label = f"{detection.label} {detection.confidence:.2f}"
+        (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.58, 2)
+        y_text = max(text_h + 8, y1)
+        cv2.rectangle(annotated, (x1, y_text - text_h - 8), (x1 + text_w + 8, y_text + baseline), (0, 0, 0), -1)
+        cv2.putText(annotated, label, (x1 + 4, y_text - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.58, bgr_color, 2, cv2.LINE_AA)
+    if not detections:
+        cv2.putText(annotated, "YOLO: no detections", (16, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 215, 255), 2, cv2.LINE_AA)
+    return annotated
 
 
 class RealSenseObjectDetectorNode:
@@ -286,6 +346,8 @@ class RealSenseObjectDetectorNode:
             self.yolo_model = self._load_yolo_model(importlib.import_module("torch"))
         self.publisher = self.node.create_publisher(Point, "/target_pixel", 10)
         self.label_pub = self.node.create_publisher(String, "/target_label", 10)
+        self.annotated_image_pub = self.node.create_publisher(Image, "/vision/yolo/annotated_image", 10)
+        self.detections_pub = self.node.create_publisher(String, "/vision/detections", 10)
         self.color_sub = self.node.create_subscription(String, "/target_color", self.target_callback, 10)
         self.label_sub = self.node.create_subscription(String, "/target_label_cmd", self.target_callback, 10)
         self.image_sub = self.node.create_subscription(Image, "/camera/camera/color/image_raw", self.image_callback, qos_profile_sensor_data)
@@ -293,7 +355,8 @@ class RealSenseObjectDetectorNode:
         self.info_sub = self.node.create_subscription(CameraInfo, "/camera/camera/color/camera_info", self.info_callback, qos_profile_sensor_data)
         self.node.get_logger().info(
             "RealSense D435i detector ready; "
-            f"mode={self.detector_mode}, target={self.target_label}, model={self.yolo_model_path}; publishing /target_pixel"
+            f"mode={self.detector_mode}, target={self.target_label}, model={self.yolo_model_path}; "
+            "publishing /target_pixel, /vision/yolo/annotated_image, /vision/detections"
         )
 
     @staticmethod
@@ -330,9 +393,22 @@ class RealSenseObjectDetectorNode:
         except Exception as exc:  # noqa: BLE001
             self.node.get_logger().error(f"Depth conversion failed: {exc}")
 
+    def _publish_annotated_image(self, bgr: Any, detections: Sequence[YoloDetection]) -> None:
+        annotated = draw_yolo_detections(bgr, detections, target_label=self.target_label)
+        try:
+            image_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+            image_msg.header.frame_id = "camera_color_optical_frame"
+            self.annotated_image_pub.publish(image_msg)
+        except Exception as exc:  # noqa: BLE001
+            self.node.get_logger().error(f"Annotated image publish failed: {exc}")
+
+    def _publish_detection_json(self, detections: Sequence[YoloDetection], image_shape: tuple[int, int]) -> None:
+        payload = build_vision_detections_message(detections, image_shape=image_shape, frame_id="camera_color_optical_frame", stamp=self.node.get_clock().now().nanoseconds / 1e9)
+        msg = self.String()
+        msg.data = json.dumps(payload, ensure_ascii=False)
+        self.detections_pub.publish(msg)
+
     def image_callback(self, msg: Any) -> None:
-        if self.depth_image is None or self.intrinsics is None:
-            return
         if self.detector_mode == "yolo" and self.target_label == "none":
             return
         if self.detector_mode != "yolo" and self.target_color == "none":
@@ -342,20 +418,39 @@ class RealSenseObjectDetectorNode:
         except Exception as exc:  # noqa: BLE001
             self.node.get_logger().error(f"Color conversion failed: {exc}")
             return
+
+        detections: list[YoloDetection] = []
+        detection: DepthDetection | None = None
         if self.detector_mode == "yolo":
             if self.yolo_model is None:
                 self.node.get_logger().error("YOLO detector mode selected but model is not loaded")
+                self._publish_annotated_image(bgr, [])
                 return
-            detection = detect_largest_yolo_depth_point(
-                bgr,
-                self.depth_image,
-                self.intrinsics,
-                self.yolo_model,
-                [self.target_label],
-                min_confidence=self.min_confidence,
-                min_area=self.min_area,
-            )
+            results = self.yolo_model(bgr)
+            names = getattr(self.yolo_model, "names", getattr(results, "names", {}))
+            detections = [
+                d
+                for d in parse_yolo_xyxy_results(results, names)
+                if d.confidence >= self.min_confidence and d.area >= self.min_area
+            ]
+            selected = select_yolo_detection(detections, [self.target_label], min_confidence=self.min_confidence, min_area=self.min_area)
+            if selected is not None and self.depth_image is not None and self.intrinsics is not None:
+                u, v = selected.center_pixel
+                depth_mm = median_depth_near_pixel(self.depth_image, u, v, radius=3)
+                if depth_mm > 0:
+                    detection = DepthDetection(
+                        pixel=(u, v),
+                        camera_point_mm=deproject_pixel_to_camera_mm(u, v, depth_mm, self.intrinsics),
+                        area=selected.area,
+                        label=selected.label,
+                        confidence=selected.confidence,
+                        bbox_xyxy=selected.bbox_xyxy,
+                    )
+            self._publish_annotated_image(bgr, detections)
+            self._publish_detection_json(detections, bgr.shape[:2])
         else:
+            if self.depth_image is None or self.intrinsics is None:
+                return
             detection = detect_largest_colored_depth_point_by_color(
                 bgr,
                 self.depth_image,
