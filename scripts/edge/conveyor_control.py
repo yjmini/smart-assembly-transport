@@ -266,29 +266,37 @@ def _drive_servo_pulse(servo_device, pulse_width_sec: float, hold_sec: float) ->
         time.sleep(low_time)
 
 
-def _set_sorter(direction: str) -> bool:
-    servo = _servo_device()
-    if not servo:
-        return False
-    try:
-        pulse = SORTER_LEFT_PULSE_SEC if direction == "left" else SORTER_RIGHT_PULSE_SEC
-        _drive_servo_pulse(servo, pulse, SORTER_SERVO_HOLD_SEC)
-        return True
-    finally:
-        servo.off()
-        close_devices(servo)
+def _pulse_stepper_holding_servo(
+    step_device,
+    servo_device,
+    hold_pulse_sec: float,
+    count: int,
+    delay_sec: float,
+) -> tuple[int, bool]:
+    """Run the conveyor stepper while keeping the sorter flap engaged.
 
-
-def _center_sorter() -> bool:
-    servo = _servo_device()
-    if not servo:
-        return False
-    try:
-        _drive_servo_pulse(servo, SORTER_NEUTRAL_PULSE_SEC, SORTER_SERVO_HOLD_SEC)
-        return True
-    finally:
-        servo.off()
-        close_devices(servo)
+    The diverter servo is refreshed with a short pulse roughly every servo PWM
+    period so it physically holds the sort position for the *entire* belt
+    movement instead of drifting back as soon as the initial pulse train ends.
+    Returns (completed_steps, stopped_by_request)."""
+    low_time = max(0.0, SORTER_SERVO_PERIOD_SEC - hold_pulse_sec)
+    step_period = max(delay_sec * 2.0, 1e-9)
+    refresh_every = max(1, int(SORTER_SERVO_PERIOD_SEC / step_period))
+    completed = 0
+    for index in range(count):
+        if stop_requested():
+            return completed, True
+        if servo_device is not None and index % refresh_every == 0:
+            servo_device.on()
+            time.sleep(hold_pulse_sec)
+            servo_device.off()
+            time.sleep(low_time)
+        step_device.on()
+        time.sleep(delay_sec)
+        step_device.off()
+        completed += 1
+        time.sleep(delay_sec)
+    return completed, False
 
 
 def run_digital_action(action: str) -> dict[str, Any]:
@@ -342,16 +350,33 @@ def run_stepper_action(action: str) -> dict[str, Any]:
             clear_stop_request()
             sort_direction = None
             sorter_gpio_available = False
+            servo = None
+            hold_pulse = None
             if action in {"sort-left", "sort-right"}:
                 sort_direction = "left" if action == "sort-left" else "right"
-                sorter_gpio_available = _set_sorter(sort_direction)
+                servo = _servo_device()
+                sorter_gpio_available = servo is not None
+                if servo is not None:
+                    hold_pulse = SORTER_LEFT_PULSE_SEC if sort_direction == "left" else SORTER_RIGHT_PULSE_SEC
+                    # Drive the flap to the sort position and let it settle there
+                    # before the belt starts moving.
+                    _drive_servo_pulse(servo, hold_pulse, SORTER_SERVO_HOLD_SEC)
             _set_forward_direction(direction)
             enable.on()
-            completed_steps, stopped_by_request = _pulse_stepper(step, STEPS, STEP_DELAY_SEC)
+            if servo is not None:
+                # Keep the flap engaged for the whole belt run.
+                completed_steps, stopped_by_request = _pulse_stepper_holding_servo(
+                    step, servo, hold_pulse, STEPS, STEP_DELAY_SEC
+                )
+            else:
+                completed_steps, stopped_by_request = _pulse_stepper(step, STEPS, STEP_DELAY_SEC)
             enable.off()
             step.off()
-            if sort_direction:
-                _center_sorter()
+            if servo is not None:
+                # Belt finished: return the flap to neutral, then release the servo.
+                _drive_servo_pulse(servo, SORTER_NEUTRAL_PULSE_SEC, SORTER_SERVO_HOLD_SEC)
+                servo.off()
+                close_devices(servo)
             if stopped_by_request:
                 request = stop_request_payload()
                 return write_state(

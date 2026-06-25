@@ -1,0 +1,76 @@
+비전 pick and place 켜는 방법
+
+터미널1
+ros2 launch dobot_bringup dobot_magician_control_system.launch.py
+
+터미널2
+ros2 launch realsense2_camera rs_launch.py   align_depth.enable:=true   pointcloud.enable:=false
+
+터미널3
+ros2 service call /dobot_homing_service dobot_msgs/srv/ExecuteHomingProcedure
+
+ros2 run dobot_controller two_object_pick_place --ros-args   -p target_colors:=car_lower,car_upper   -p quality_result:=normal   -p conveyor_sort_steps:=3200
+
+//두번만 동작코드//
+ros2 run dobot_controller two_object_pick_place --ros-args \
+  -p target_colors:=car_lower,car_upper \
+  -p conveyor_sort_steps:=16000 \
+  -p max_cycles:=2
+
+터미널4
+ros2 run vision_detector realsense_object_detector --ros-args   -p detector_mode:=yolo   -p yolo_model_path:=/home/ssafy/smart-assembly-transport/models/yolo/car_parts_best.pt   -p target_labels:=car_lower,car_upper   -p min_confidence:=0.35   -p min_area:=1000.0
+
+
+
+
+
+
+터틀봇 켜는 방법
+ssh turtlebot4@192.168.110.174
+
+터미널 1
+ros2 launch turtlebot3_bringup robot.launch.py
+
+터미널 2
+ros2 launch turtlebot3_navigation2 navigation2.launch.py \
+  map:=/home/ssafy/smart-assembly-transport/map/pjt_map.yaml \
+  params_file:=/home/ssafy/smart-assembly-transport/config/nav2/pjt_waffle_pi.yaml
+
+
+
+
+UI 켜는 방법
+
+터미널 1
+cd ~/smart-assembly-transport
+  (fuser -k 8765/tcp)
+python3 -m server.app
+
+터미널2
+ros2 launch realsense2_camera rs_launch.py
+
+터미널 3
+cd ~/smart-assembly-transport
+  (fuser -k 8080/tcp)
+scripts/start_realsense_stream.sh
+
+터미널 4
+cd ~/smart-assembly-transport
+scripts/start_turtlebot_pose_bridge.sh
+
+터미널 5
+ros2 launch turtlebot3_bringup robot.launch.py
+
+터미널 6
+ros2 launch turtlebot3_navigation2 navigation2.launch.py \
+  map:=/home/ssafy/smart-assembly-transport/map/pjt_map.yaml \
+  params_file:=/home/ssafy/smart-assembly-transport/config/nav2/pjt_waffle_pi.yaml
+
+터미널 7
+cd ~/smart-assembly-transport
+python3 -m http.server 3001
+
+브라우저
+http://127.0.0.1:3001/web/index.html
+
+

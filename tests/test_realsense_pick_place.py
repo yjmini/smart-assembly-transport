@@ -150,10 +150,46 @@ def test_second_object_starts_conveyor_after_color_switch():
     assert coordinator.accept_target(CameraPoint(-30.0, 42.0, 410.0)) is True
     coordinator.wait_for_idle(timeout_sec=1.0)
 
-    assert coordinator.completed_count == 2
-    assert statuses == ["COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2", "COMPLETED_TWO_OBJECT_PICK_PLACE"]
-    assert target_colors == ["car_lower", "car_upper"]
+    # After the second object the cycle finishes: Dobot returns home, the
+    # conveyor sorts, then the coordinator resets so the next cycle can begin.
+    assert coordinator.cycle_count == 1
+    assert coordinator.completed_count == 0
+    assert statuses == [
+        "COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2",
+        "SORTING_NORMAL_run=fixed",
+        "COMPLETED_TWO_OBJECT_PICK_PLACE",
+    ]
+    assert target_colors == ["car_lower", "car_upper", "car_lower"]
+    assert executed_batches[-2] == ["return_to_home"]
     assert executed_batches[-1] == ["sort_conveyor_left_after_quality_pass"]
+
+
+def test_max_cycles_stops_after_configured_cycles():
+    config = replace(
+        PickPlaceConfig.reference_from_project_pill(),
+        color_switch_settle_sec=0.0,
+        max_cycles=1,
+    )
+    statuses: list[str] = []
+
+    coordinator = ObjectPickPlaceCoordinator(
+        config,
+        lambda steps: None,
+        statuses.append,
+        set_target_color=lambda _color: None,
+        target_colors=("car_lower", "car_upper"),
+    )
+
+    # Complete one full cycle (two objects).
+    assert coordinator.accept_target(CameraPoint(20.0, -109.0, 384.0)) is True
+    coordinator.wait_for_idle(timeout_sec=1.0)
+    assert coordinator.accept_target(CameraPoint(-30.0, 42.0, 410.0)) is True
+    coordinator.wait_for_idle(timeout_sec=1.0)
+
+    assert coordinator.cycle_count == 1
+    assert any(s.startswith("ALL_CYCLES_DONE") for s in statuses)
+    # Further targets are rejected once the cycle cap is reached.
+    assert coordinator.accept_target(CameraPoint(10.0, -100.0, 390.0)) is False
 
 
 def test_quality_result_maps_normal_left_and_abnormal_right():

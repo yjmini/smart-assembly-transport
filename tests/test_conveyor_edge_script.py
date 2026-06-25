@@ -166,6 +166,7 @@ def test_stepper_sort_left_positions_servo_then_moves_longer(monkeypatch, tmp_pa
             "CONVEYOR_STEP_DELAY_SEC": "0.0005",
             "SORTER_SERVO_PIN": 18,
             "SORTER_SERVO_HOLD_SEC": "0.04",
+            "SORTER_SERVO_PERIOD_SEC": "0.0005",
         },
     )
 
@@ -175,9 +176,20 @@ def test_stepper_sort_left_positions_servo_then_moves_longer(monkeypatch, tmp_pa
     assert result["sort_direction"] == "left"
     assert result["completed_steps"] == 4
     assert result["sorter_servo_pin"] == 18
-    assert FakeOutputDevice.events.count(("init", 18, True, False)) == 2
+    # A single servo device is opened for the whole sort operation: it positions
+    # the flap, holds it during the belt run, then returns it to neutral.
+    assert FakeOutputDevice.events.count(("init", 18, True, False)) == 1
     assert ("on", 18) in FakeOutputDevice.events
     assert ("off", 18) in FakeOutputDevice.events
     assert FakeOutputDevice.events.count(("on", 20)) == 4
+    # The servo is refreshed at least once while the belt is still moving so the
+    # flap stays engaged for the entire run (not just before it starts).
+    last_step_on = len(FakeOutputDevice.events) - 1 - FakeOutputDevice.events[::-1].index(("on", 20))
+    first_step_on = FakeOutputDevice.events.index(("on", 20))
+    servo_ons_during_run = [
+        i for i, ev in enumerate(FakeOutputDevice.events)
+        if ev == ("on", 18) and first_step_on <= i <= last_step_on
+    ]
+    assert servo_ons_during_run
     assert 0.001 in sleeper.calls
     assert 0.0015 in sleeper.calls
