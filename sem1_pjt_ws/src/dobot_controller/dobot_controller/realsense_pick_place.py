@@ -16,12 +16,26 @@ loaded only at runtime.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import Path
 from shlex import quote
 from typing import Iterable, Any, Callable
 import json
 import subprocess
 import threading
 import time
+
+_RUN_COUNT_FILE = Path.home() / ".smart_assembly_run_count"
+
+
+def _load_run_index() -> int:
+    try:
+        return int(_RUN_COUNT_FILE.read_text(encoding="utf-8").strip())
+    except Exception:
+        return 0
+
+
+def _save_run_index(index: int) -> None:
+    _RUN_COUNT_FILE.write_text(str(index), encoding="utf-8")
 
 try:
     from dobot_controller.sequence import Pose4D
@@ -81,9 +95,13 @@ class PickPlaceConfig:
     upper_stack_place_lift_mm: float
     color_switch_settle_sec: float = 1.0
     quality_result: str = "normal"
-    conveyor_sort_steps: int = 3200
+    quality_results_sequence: tuple[str, ...] = ()  # if non-empty, cycles through these per run (overrides quality_result)
+    conveyor_sort_steps: int = 9600
     conveyor_step_delay_sec: float = 0.0001
+    conveyor_extra_steps: int = 0  # additional steps after sort to push item fully through the sorter
     motion_r: float = 0.0
+    home_pose_mm: Pose4D = Pose4D(150.0, 0.0, 100.0, 0.0)  # matches dobot_homing homing_position
+    max_cycles: int = 0  # 0 = unlimited; >0 = stop after N pick-place cycles
 
     @classmethod
     def reference_from_project_pill(cls) -> "PickPlaceConfig":
@@ -238,6 +256,7 @@ class ObjectPickPlaceCoordinator:
         self.target_colors = tuple(color.strip().lower() for color in target_colors if color.strip()) or ("car_lower", "car_upper")
         self.completed_points: list[CameraPoint] = []
         self.executing = False
+        self.cycle_count: int = 0
         self._ignore_targets_until = 0.0
         self._lock = threading.Lock()
         self._worker: threading.Thread | None = None
@@ -250,6 +269,8 @@ class ObjectPickPlaceCoordinator:
 
     def accept_target(self, point: CameraPoint) -> bool:
         with self._lock:
+            if self.config.max_cycles > 0 and self.cycle_count >= self.config.max_cycles:
+                return False
             if self.executing or len(self.completed_points) >= 2:
                 return False
             if time.monotonic() < self._ignore_targets_until:
@@ -277,8 +298,25 @@ class ObjectPickPlaceCoordinator:
                 self.completed_points.append(point)
                 completed = len(self.completed_points)
             if completed == 2:
-                conveyor_action, step_name = sort_action_for_quality(self.config.quality_result)
+                if self.config.quality_results_sequence:
+                    run_index = _load_run_index()
+                    quality = self.config.quality_results_sequence[run_index % len(self.config.quality_results_sequence)]
+                    _save_run_index(run_index + 1)
+                else:
+                    quality = self.config.quality_result
+                conveyor_action, step_name = sort_action_for_quality(quality)
+                self.publish_status(f"SORTING_{quality.upper()}_run={_load_run_index() - 1 if self.config.quality_results_sequence else 'fixed'}")
+                self.execute_steps([PickPlaceStep("return_to_home", "dobot_pose", self.config.home_pose_mm)])
                 self.execute_steps([PickPlaceStep(step_name, "conveyor", conveyor_action=conveyor_action)])
+                with self._lock:
+                    self.completed_points.clear()
+                    self.cycle_count += 1
+                    self._ignore_targets_until = time.monotonic() + self.config.color_switch_settle_sec
+                max_cycles = self.config.max_cycles
+                if max_cycles > 0 and self.cycle_count >= max_cycles:
+                    self.publish_status(f"ALL_CYCLES_DONE_cycle={self.cycle_count}_of_{max_cycles}")
+                else:
+                    self.set_target_color(self.target_colors[0])
                 self.publish_status("COMPLETED_TWO_OBJECT_PICK_PLACE")
             else:
                 next_color = self.target_colors[min(completed, len(self.target_colors) - 1)]
@@ -310,8 +348,11 @@ class TwoObjectPickPlaceNode:
         self.PointToPoint = PointToPoint
         self.SuctionCupControl = SuctionCupControl
         quality_result = str(self.node.declare_parameter("quality_result", "normal").value)
-        conveyor_sort_steps = int(self.node.declare_parameter("conveyor_sort_steps", 3200).value)
+        quality_results_sequence_param = str(self.node.declare_parameter("quality_results_sequence", "normal,abnormal").value)
+        quality_results_sequence = tuple(q.strip().lower() for q in quality_results_sequence_param.split(",") if q.strip())
+        conveyor_sort_steps = int(self.node.declare_parameter("conveyor_sort_steps", 9600).value)
         conveyor_step_delay_sec = float(self.node.declare_parameter("conveyor_step_delay_sec", 0.0001).value)
+        conveyor_extra_steps = int(self.node.declare_parameter("conveyor_extra_steps", 0).value)
         default_config = PickPlaceConfig.reference_from_project_pill()
         fixed_place_x_mm = float(self.node.declare_parameter("fixed_place_x_mm", default_config.conveyor_pose_mm.x).value)
         fixed_place_y_mm = float(self.node.declare_parameter("fixed_place_y_mm", default_config.conveyor_pose_mm.y).value)
@@ -320,15 +361,31 @@ class TwoObjectPickPlaceNode:
         upper_stack_place_lift_mm = float(
             self.node.declare_parameter("upper_stack_place_lift_mm", default_config.upper_stack_place_lift_mm).value
         )
+        home_x_mm = float(self.node.declare_parameter("home_x_mm", default_config.home_pose_mm.x).value)
+        home_y_mm = float(self.node.declare_parameter("home_y_mm", default_config.home_pose_mm.y).value)
+        home_z_mm = float(self.node.declare_parameter("home_z_mm", default_config.home_pose_mm.z).value)
+        home_r_deg = float(self.node.declare_parameter("home_r_deg", default_config.home_pose_mm.r).value)
+        max_cycles = int(self.node.declare_parameter("max_cycles", 2).value)
         self.config = replace(
             default_config,
             quality_result=quality_result,
+            quality_results_sequence=quality_results_sequence,
             conveyor_sort_steps=conveyor_sort_steps,
             conveyor_step_delay_sec=conveyor_step_delay_sec,
+            conveyor_extra_steps=conveyor_extra_steps,
             conveyor_pose_mm=Pose4D(fixed_place_x_mm, fixed_place_y_mm, fixed_place_z_mm, fixed_place_r_deg),
             object_place_spacing_y_mm=0.0,
             upper_stack_place_lift_mm=upper_stack_place_lift_mm,
+            home_pose_mm=Pose4D(home_x_mm, home_y_mm, home_z_mm, home_r_deg),
+            max_cycles=max_cycles,
         )
+        run_index = _load_run_index()
+        if quality_results_sequence:
+            next_quality = quality_results_sequence[run_index % len(quality_results_sequence)]
+            self.node.get_logger().info(
+                f"Quality sequence mode: run #{run_index} → '{next_quality}' "
+                f"(sequence={list(quality_results_sequence)})"
+            )
         self.motion_type = int(self.node.declare_parameter("motion_type", 1).value)
         target_colors_param = str(self.node.declare_parameter("target_colors", "car_lower,car_upper").value)
         # For compatibility with old launch files the parameter is still named
@@ -391,6 +448,14 @@ class TwoObjectPickPlaceNode:
                     step_delay_sec=self.config.conveyor_step_delay_sec,
                 )
                 subprocess.run(command, shell=True, check=False, text=True, capture_output=True, timeout=60)
+                if not self.conveyor_command_template and self.config.conveyor_extra_steps > 0:
+                    extra_cmd = build_conveyor_command(
+                        action="start",
+                        steps=self.config.conveyor_extra_steps,
+                        step_delay_sec=self.config.conveyor_step_delay_sec,
+                    )
+                    self.node.get_logger().info(f"Running {self.config.conveyor_extra_steps} extra conveyor steps to pass through sorter")
+                    subprocess.run(extra_cmd, shell=True, check=False, text=True, capture_output=True, timeout=60)
 
     def publish_status(self, status: str) -> None:
         from std_msgs.msg import String
