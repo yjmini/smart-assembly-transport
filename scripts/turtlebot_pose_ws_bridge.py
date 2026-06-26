@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import json
 import math
+import threading
 import time
 from typing import Any
 
@@ -105,7 +106,6 @@ async def websocket_sender(bridge: TurtleBotPoseBridge, ws_url: str, rate_hz: fl
             async with websockets.connect(ws_url) as ws:
                 print(f"TurtleBot pose bridge connected to {ws_url}", flush=True)
                 while True:
-                    rclpy.spin_once(bridge.node, timeout_sec=0.01)
                     payload = bridge.latest.payload
                     if payload and payload["seq"] != last_sent_seq:
                         await ws.send(json.dumps(payload, ensure_ascii=False))
@@ -129,6 +129,8 @@ def main() -> None:
     args = parse_args()
     rclpy.init()
     bridge = TurtleBotPoseBridge(args.topic, args.message_type)
+    spin_thread = threading.Thread(target=lambda: rclpy.spin(bridge.node), name="turtlebot_pose_ros_spin", daemon=True)
+    spin_thread.start()
     print(f"TurtleBot pose bridge subscribed to {args.topic} ({args.message_type})", flush=True)
     try:
         asyncio.run(websocket_sender(bridge, args.ws_url, args.rate_hz))

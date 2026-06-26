@@ -25,4 +25,5 @@ exec ros2 run vision_detector realsense_object_detector --ros-args \
   -p yolo_model_path:="${YOLO_MODEL_PATH:-/home/ssafy/smart-assembly-transport/models/yolo/car_parts_best.pt}" \
   -p target_labels:="${YOLO_TARGET_LABELS:-car_lower,car_upper}" \
   -p min_confidence:="${YOLO_MIN_CONFIDENCE:-0.35}" \
-  -p min_area:="${YOLO_MIN_AREA:-1000.0}"
+  -p min_area:="${YOLO_MIN_AREA:-1000.0}" \
+  -p yolo_roi:="${YOLO_ROI:-0.161,0.0,0.611,0.599}"

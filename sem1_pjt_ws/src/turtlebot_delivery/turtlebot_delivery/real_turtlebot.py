@@ -45,9 +45,27 @@ class TurtleBotCommandBuilder:
             }
         )
 
+    def _goal_pose_yaml(self, destination: str) -> str:
+        pose = self.config.pose_for(destination)
+        z, w = yaw_to_quaternion_z_w(pose.yaw)
+        return (
+            "{header: {stamp: {sec: 0, nanosec: 0}, "
+            f"frame_id: '{self.config.map_frame}'"
+            "}, pose: {position: {"
+            f"x: {pose.x}, y: {pose.y}, z: 0.0"
+            "}, orientation: {"
+            f"z: {z}, w: {w}"
+            "}}}"
+        )
+
     def _nav2_goal_command(self, destination: str) -> str:
-        goal = self._goal_json(destination)
-        return f"ros2 action send_goal {quote(self.config.nav_action)} nav2_msgs/action/NavigateToPose {quote(goal)}"
+        # In this lab setup, RViz /goal_pose drives the robot reliably while
+        # direct `ros2 action send_goal /navigate_to_pose ...` can report
+        # SUCCEEDED with distance_remaining still > 1 m and no real motion.
+        # Publish the same PoseStamped interface RViz uses; dashboard pose
+        # feedback handles arrival state updates.
+        goal = self._goal_pose_yaml(destination)
+        return f"ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped {quote(goal)}"
 
     def _ssh_command(self, remote_steps: list[str]) -> list[str]:
         remote = " && ".join(

@@ -7,6 +7,7 @@ from sem1_pjt_ws.src.dobot_controller.dobot_controller.realsense_pick_place impo
     CameraPoint,
     ObjectPickPlaceCoordinator,
     PickPlaceConfig,
+    TwoObjectPickPlaceNode,
     build_conveyor_command,
     build_two_object_pick_place_plan,
     sort_action_for_quality,
@@ -156,7 +157,10 @@ def test_second_object_starts_conveyor_after_color_switch():
     assert coordinator.completed_count == 0
     assert statuses == [
         "COMPLETED_OBJECT_1_WAITING_FOR_OBJECT_2",
+        "CONVEYOR_MOVING",
+        "QC_CHECK",
         "SORTING_NORMAL_run=fixed",
+        "SORTING_COMPLETE",
         "COMPLETED_TWO_OBJECT_PICK_PLACE",
     ]
     assert target_colors == ["car_lower", "car_upper", "car_lower"]
@@ -210,3 +214,38 @@ def test_conveyor_command_uses_sort_action_and_longer_step_count():
 
     assert "CONVEYOR_STEPS=3200" in command
     assert "conveyor_control.py sort-right" in command
+
+
+def test_conveyor_failure_stops_false_quality_progress(monkeypatch):
+    import subprocess
+
+    from sem1_pjt_ws.src.dobot_controller.dobot_controller import realsense_pick_place as module
+
+    class FakeCompletedProcess:
+        returncode = 23
+        stdout = ""
+        stderr = "ssh failed"
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: FakeCompletedProcess())
+
+    node = object.__new__(module.TwoObjectPickPlaceNode)
+    node.config = module.PickPlaceConfig.reference_from_project_pill()
+    node.conveyor_command_template = ""
+    node.node = type("FakeNode", (), {"get_logger": lambda self: type("Logger", (), {"info": lambda *a, **k: None, "error": lambda *a, **k: None})()})()
+
+    with pytest.raises(RuntimeError, match="Conveyor command failed"):
+        node.run_conveyor_step(module.PickPlaceStep("sort_conveyor_left_after_quality_pass", "conveyor", conveyor_action="sort-left"))
+
+
+def test_node_startup_publishes_order_received_then_object_detected_before_first_pick():
+    statuses: list[str] = []
+    node = object.__new__(TwoObjectPickPlaceNode)
+    node.publish_status = statuses.append
+
+    node.publish_startup_order_status()
+    node.publish_object_detected_status(1, CameraPoint(20.0, -109.0, 384.0))
+
+    assert statuses == [
+        "ORDER_RECEIVED",
+        "OBJECT_DETECTED_index=1",
+    ]

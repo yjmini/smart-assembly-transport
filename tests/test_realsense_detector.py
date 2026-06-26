@@ -6,6 +6,7 @@ from sem1_pjt_ws.src.vision_detector.vision_detector.realsense_detector import (
     YoloDetection,
     build_vision_detections_message,
     draw_yolo_detections,
+    filter_yolo_detections_by_roi,
     deproject_pixel_to_camera_mm,
     detect_largest_colored_depth_point,
     detect_largest_colored_depth_point_by_color,
@@ -143,3 +144,16 @@ def test_draw_yolo_detections_changes_pixels_inside_bbox():
     assert annotated.shape == bgr.shape
     assert annotated.sum() > 0
     assert annotated[28:34, 18:24].sum() > 0
+
+
+def test_yolo_roi_filters_out_detections_whose_centers_are_outside_marked_region():
+    detections = [
+        YoloDetection("car_upper", 0.90, (170, 60, 230, 120)),
+        YoloDetection("car_lower", 0.94, (384, 80, 450, 200)),
+        YoloDetection("car_lower", 0.46, (555, 180, 635, 300)),
+        YoloDetection("car_upper", 0.85, (220, 320, 300, 420)),
+    ]
+
+    filtered = filter_yolo_detections_by_roi(detections, (0.161, 0.0, 0.611, 0.599), image_shape=(480, 640))
+
+    assert [d.confidence for d in filtered] == [pytest.approx(0.90), pytest.approx(0.94)]

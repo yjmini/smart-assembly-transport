@@ -125,17 +125,30 @@ def image_to_bgr(msg: Image) -> np.ndarray:
 
 
 class RealsenseMjpegBridge:
-    def __init__(self, topic: str, jpeg_quality: int, *, compressed: bool = False) -> None:
+    def __init__(
+        self,
+        topic: str,
+        jpeg_quality: int,
+        *,
+        compressed: bool = False,
+        durability: str = "transient_local",
+    ) -> None:
         self.topic = topic
         self.jpeg_quality = jpeg_quality
         self.compressed = compressed
         self.latest = LatestFrame()
         self.node = rclpy.create_node("realsense_mjpeg_bridge")
+        normalized_durability = durability.strip().lower().replace("-", "_")
+        durability_policy = (
+            DurabilityPolicy.VOLATILE
+            if normalized_durability in {"volatile", "vol"}
+            else DurabilityPolicy.TRANSIENT_LOCAL
+        )
         qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=5,
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            durability=durability_policy,
         )
         if compressed:
             self.subscription = self.node.create_subscription(
@@ -270,13 +283,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1", help="HTTP bind host")
     parser.add_argument("--port", type=int, default=8080, help="HTTP bind port")
     parser.add_argument("--jpeg-quality", type=int, default=80, help="JPEG quality 1-100")
+    parser.add_argument(
+        "--durability",
+        default="transient_local",
+        choices=["transient_local", "volatile"],
+        help=(
+            "Subscriber durability. RealSense camera topics often need transient_local, "
+            "but locally generated YOLO annotated topics are volatile. "
+            "Can also be set with REALSENSE_DURABILITY."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     rclpy.init()
-    bridge = RealsenseMjpegBridge(args.topic, max(1, min(100, args.jpeg_quality)), compressed=args.compressed)
+    bridge = RealsenseMjpegBridge(
+        args.topic,
+        max(1, min(100, args.jpeg_quality)),
+        compressed=args.compressed,
+        durability=args.durability,
+    )
     spin_thread = threading.Thread(target=rclpy.spin, args=(bridge.node,), daemon=True)
     spin_thread.start()
 

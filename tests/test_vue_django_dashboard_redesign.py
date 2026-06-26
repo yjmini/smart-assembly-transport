@@ -64,7 +64,7 @@ def test_progress_page_keeps_all_operator_work_controls_and_live_panels():
 
     assert "operator-workspace" in progress
     assert "grid-template-areas:'command command command' 'flow flow flow'" in progress
-    assert ".progress-page .stage-strip{grid-template-columns:repeat(11" in progress
+    assert ".progress-page .stage-strip{grid-template-columns:repeat(12" in progress
     assert "word-break:keep-all" in progress
     assert "position:sticky" in progress
     assert "results-admin" not in progress

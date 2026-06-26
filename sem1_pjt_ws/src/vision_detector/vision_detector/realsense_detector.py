@@ -198,6 +198,61 @@ def parse_yolo_xyxy_results(results: Any, names: Any) -> list[YoloDetection]:
     return detections
 
 
+def _roi_to_xyxy(roi: Sequence[float] | None, image_shape: tuple[int, int] | None) -> tuple[float, float, float, float] | None:
+    if not roi or len(roi) != 4 or image_shape is None:
+        return None
+    height, width = image_shape[:2]
+    x, y, w, h = [float(value) for value in roi]
+    if max(abs(x), abs(y), abs(w), abs(h)) <= 1.0:
+        x, w = x * width, w * width
+        y, h = y * height, h * height
+    x1 = max(0.0, min(float(width), x))
+    y1 = max(0.0, min(float(height), y))
+    x2 = max(0.0, min(float(width), x + w))
+    y2 = max(0.0, min(float(height), y + h))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def filter_yolo_detections_by_roi(
+    detections: Sequence[YoloDetection],
+    roi: Sequence[float] | None,
+    *,
+    image_shape: tuple[int, int] | None,
+) -> list[YoloDetection]:
+    roi_xyxy = _roi_to_xyxy(roi, image_shape)
+    if roi_xyxy is None:
+        return list(detections)
+    rx1, ry1, rx2, ry2 = roi_xyxy
+    return [
+        detection
+        for detection in detections
+        if rx1 <= detection.center_pixel[0] <= rx2 and ry1 <= detection.center_pixel[1] <= ry2
+    ]
+
+
+def parse_roi(value: str) -> tuple[float, float, float, float] | None:
+    text = (value or "").strip()
+    if not text or text.lower() in {"none", "off", "disabled", "full"}:
+        return None
+    parts = [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
+    if len(parts) != 4:
+        raise ValueError(f"ROI must be four comma-separated numbers x,y,w,h; got: {value!r}")
+    return tuple(float(part) for part in parts)  # type: ignore[return-value]
+
+
+def draw_roi_boundary(bgr_image: Any, roi: Sequence[float] | None) -> Any:
+    import cv2
+
+    roi_xyxy = _roi_to_xyxy(roi, bgr_image.shape[:2])
+    if roi_xyxy is None:
+        return bgr_image
+    x1, y1, x2, y2 = [int(round(v)) for v in roi_xyxy]
+    cv2.rectangle(bgr_image, (x1, y1), (x2, y2), (255, 0, 255), 3)
+    return bgr_image
+
+
 def select_yolo_detection(
     detections: Sequence[YoloDetection],
     target_labels: Sequence[str],
@@ -337,6 +392,7 @@ class RealSenseObjectDetectorNode:
         self.target_color = str(self.node.declare_parameter("target_color", "yellow").value)
         self.min_area = float(self.node.declare_parameter("min_area", 1000.0).value)
         self.min_confidence = float(self.node.declare_parameter("min_confidence", 0.35).value)
+        self.yolo_roi = parse_roi(str(self.node.declare_parameter("yolo_roi", "0.161,0.0,0.611,0.599").value))
         self.depth_image = None
         self.intrinsics: RealSenseIntrinsics | None = None
         self.yolo_model = None
@@ -355,7 +411,7 @@ class RealSenseObjectDetectorNode:
         self.info_sub = self.node.create_subscription(CameraInfo, "/camera/camera/color/camera_info", self.info_callback, qos_profile_sensor_data)
         self.node.get_logger().info(
             "RealSense D435i detector ready; "
-            f"mode={self.detector_mode}, target={self.target_label}, model={self.yolo_model_path}; "
+            f"mode={self.detector_mode}, target={self.target_label}, model={self.yolo_model_path}, roi={self.yolo_roi}; "
             "publishing /target_pixel, /vision/yolo/annotated_image, /vision/detections"
         )
 
@@ -395,6 +451,7 @@ class RealSenseObjectDetectorNode:
 
     def _publish_annotated_image(self, bgr: Any, detections: Sequence[YoloDetection]) -> None:
         annotated = draw_yolo_detections(bgr, detections, target_label=self.target_label)
+        annotated = draw_roi_boundary(annotated, self.yolo_roi if self.detector_mode == "yolo" else None)
         try:
             image_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
             image_msg.header.frame_id = "camera_color_optical_frame"
@@ -433,6 +490,7 @@ class RealSenseObjectDetectorNode:
                 for d in parse_yolo_xyxy_results(results, names)
                 if d.confidence >= self.min_confidence and d.area >= self.min_area
             ]
+            detections = filter_yolo_detections_by_roi(detections, self.yolo_roi, image_shape=bgr.shape[:2])
             selected = select_yolo_detection(detections, [self.target_label], min_confidence=self.min_confidence, min_area=self.min_area)
             if selected is not None and self.depth_image is not None and self.intrinsics is not None:
                 u, v = selected.center_pixel

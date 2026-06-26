@@ -305,9 +305,13 @@ class ObjectPickPlaceCoordinator:
                 else:
                     quality = self.config.quality_result
                 conveyor_action, step_name = sort_action_for_quality(quality)
-                self.publish_status(f"SORTING_{quality.upper()}_run={_load_run_index() - 1 if self.config.quality_results_sequence else 'fixed'}")
+                run_label = _load_run_index() - 1 if self.config.quality_results_sequence else "fixed"
                 self.execute_steps([PickPlaceStep("return_to_home", "dobot_pose", self.config.home_pose_mm)])
+                self.publish_status("CONVEYOR_MOVING")
                 self.execute_steps([PickPlaceStep(step_name, "conveyor", conveyor_action=conveyor_action)])
+                self.publish_status("QC_CHECK")
+                self.publish_status(f"SORTING_{quality.upper()}_run={run_label}")
+                self.publish_status("SORTING_COMPLETE")
                 with self._lock:
                     self.completed_points.clear()
                     self.cycle_count += 1
@@ -407,6 +411,18 @@ class TwoObjectPickPlaceNode:
             target_colors=self.target_colors,
         )
         self.node.get_logger().info("Two-object RealSense→Dobot→Conveyor node ready; waiting for 2 target points")
+        self._startup_status_timer = self.node.create_timer(0.5, self._publish_startup_order_status_once)
+
+    def publish_startup_order_status(self) -> None:
+        self.publish_status("ORDER_RECEIVED")
+
+    def _publish_startup_order_status_once(self) -> None:
+        self.publish_startup_order_status()
+        if getattr(self, "_startup_status_timer", None) is not None:
+            self._startup_status_timer.cancel()
+
+    def publish_object_detected_status(self, object_index: int, point: CameraPoint) -> None:
+        self.publish_status(f"OBJECT_DETECTED_index={object_index}")
 
     def target_callback(self, msg: Any) -> None:
         point = CameraPoint(float(msg.x), float(msg.y), float(msg.z))
@@ -416,6 +432,7 @@ class TwoObjectPickPlaceNode:
         object_index = self.coordinator.completed_count + 1
         accepted = self.coordinator.accept_target(point)
         if accepted:
+            self.publish_object_detected_status(object_index, point)
             self.node.get_logger().info(
                 f"Captured object {object_index}/2: camera=({point.x:.1f}, {point.y:.1f}, {point.z:.1f})"
             )
@@ -441,21 +458,35 @@ class TwoObjectPickPlaceNode:
                 if step.dwell_sec:
                     time.sleep(step.dwell_sec)
             elif step.kind == "conveyor":
-                action = step.conveyor_action or "sort-left"
-                command = self.conveyor_command_template.format(action=action) if self.conveyor_command_template else build_conveyor_command(
-                    action=action,
-                    steps=self.config.conveyor_sort_steps,
-                    step_delay_sec=self.config.conveyor_step_delay_sec,
+                self.run_conveyor_step(step)
+
+    def run_conveyor_step(self, step: PickPlaceStep) -> None:
+        action = step.conveyor_action or "sort-left"
+        command = self.conveyor_command_template.format(action=action) if self.conveyor_command_template else build_conveyor_command(
+            action=action,
+            steps=self.config.conveyor_sort_steps,
+            step_delay_sec=self.config.conveyor_step_delay_sec,
+        )
+        self.node.get_logger().info(f"Running conveyor command: {command}")
+        result = subprocess.run(command, shell=True, check=False, text=True, capture_output=True, timeout=60)
+        if result.returncode != 0:
+            self.node.get_logger().error(
+                f"Conveyor command failed rc={result.returncode}; stdout={result.stdout!r}; stderr={result.stderr!r}"
+            )
+            raise RuntimeError(f"Conveyor command failed rc={result.returncode}: {result.stderr or result.stdout}")
+        if not self.conveyor_command_template and self.config.conveyor_extra_steps > 0:
+            extra_cmd = build_conveyor_command(
+                action="start",
+                steps=self.config.conveyor_extra_steps,
+                step_delay_sec=self.config.conveyor_step_delay_sec,
+            )
+            self.node.get_logger().info(f"Running {self.config.conveyor_extra_steps} extra conveyor steps to pass through sorter")
+            extra_result = subprocess.run(extra_cmd, shell=True, check=False, text=True, capture_output=True, timeout=60)
+            if extra_result.returncode != 0:
+                self.node.get_logger().error(
+                    f"Extra conveyor command failed rc={extra_result.returncode}; stdout={extra_result.stdout!r}; stderr={extra_result.stderr!r}"
                 )
-                subprocess.run(command, shell=True, check=False, text=True, capture_output=True, timeout=60)
-                if not self.conveyor_command_template and self.config.conveyor_extra_steps > 0:
-                    extra_cmd = build_conveyor_command(
-                        action="start",
-                        steps=self.config.conveyor_extra_steps,
-                        step_delay_sec=self.config.conveyor_step_delay_sec,
-                    )
-                    self.node.get_logger().info(f"Running {self.config.conveyor_extra_steps} extra conveyor steps to pass through sorter")
-                    subprocess.run(extra_cmd, shell=True, check=False, text=True, capture_output=True, timeout=60)
+                raise RuntimeError(f"Extra conveyor command failed rc={extra_result.returncode}: {extra_result.stderr or extra_result.stdout}")
 
     def publish_status(self, status: str) -> None:
         from std_msgs.msg import String

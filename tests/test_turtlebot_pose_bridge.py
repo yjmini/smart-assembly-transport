@@ -35,3 +35,11 @@ def test_turtlebot_pose_bridge_starter_uses_ros_domain_34_and_system_python():
     ]
     for snippet in required_snippets:
         assert snippet in starter
+
+
+def test_turtlebot_pose_bridge_spins_ros_in_background_thread_not_websocket_loop():
+    script = BRIDGE.read_text(encoding="utf-8")
+
+    assert "threading.Thread" in script
+    assert "rclpy.spin(bridge.node)" in script
+    assert "rclpy.spin_once(bridge.node" not in script

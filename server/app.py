@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import asdict
 import json
+import math
 from pathlib import Path
 import sys
 from typing import Any
@@ -41,6 +42,8 @@ class WebSocketMissionServer:
         self.hardware_config = HardwareConfig.load(config_path)
         self.pipeline = RealHardwarePipeline(self.hardware_config, execute=False)
         self.clients: set[Any] = set()
+        self.active_turtlebot_destination: str | None = None
+        self.arrival_tolerance_m = 0.35
 
     def hardware_status_snapshot(self) -> dict[str, Any]:
         return self.pipeline.status_snapshot()
@@ -83,7 +86,9 @@ class WebSocketMissionServer:
         destination = parsed.get("destination") or "A"
         pipeline = RealHardwarePipeline(self.hardware_config, execute=execute)
         result = pipeline.turtlebot.navigate(destination)
+        self.active_turtlebot_destination = destination
         target = self.hardware_config.turtlebot.pose_for(destination)
+        nav_state = "RETURNING_HOME" if destination.upper() == self.hardware_config.turtlebot.home_destination.upper() else "DELIVERY_NAVIGATING"
         return [
             {
                 "type": "speech.stt.final",
@@ -93,7 +98,7 @@ class WebSocketMissionServer:
             },
             {
                 "type": "factory.state",
-                "state": "DELIVERY_NAVIGATING",
+                "state": nav_state,
                 "message": "STT requested direct TurtleBot navigation",
                 "payload": {"speech": parsed, "destination": destination, "command": transcript},
             },
@@ -107,7 +112,37 @@ class WebSocketMissionServer:
             },
         ]
 
-    def passthrough_broadcast(self, msg: dict[str, Any]) -> dict[str, Any]:
+    def turtlebot_arrival_events(self, msg: dict[str, Any]) -> list[dict[str, Any]]:
+        destination = self.active_turtlebot_destination
+        if not destination:
+            return []
+        pose = msg.get("pose") or msg
+        try:
+            x = float(pose["x"])
+            y = float(pose["y"])
+            target = self.hardware_config.turtlebot.pose_for(destination)
+        except Exception:
+            return []
+        distance = math.hypot(x - target.x, y - target.y)
+        if distance > self.arrival_tolerance_m:
+            return []
+        self.active_turtlebot_destination = None
+        is_home = destination.upper() == self.hardware_config.turtlebot.home_destination.upper()
+        state = "RETURNING_HOME" if is_home else "DELIVERED"
+        message = "TurtleBot arrived home" if is_home else "TurtleBot delivery arrived"
+        return [
+            {
+                "type": "factory.state",
+                "state": state,
+                "message": message,
+                "payload": {"destination": destination, "arrived": True, "distance_m": round(distance, 3)},
+            }
+        ]
+
+    def passthrough_broadcast(self, msg: dict[str, Any]) -> dict[str, Any] | list[dict[str, Any]]:
+        if msg.get("type") in {"turtlebot.pose", "nav.pose"}:
+            events = self.turtlebot_arrival_events(msg)
+            return [msg, *events] if events else msg
         return msg
 
     async def handle_message(self, raw: str) -> dict[str, Any] | list[dict[str, Any]]:
@@ -122,7 +157,7 @@ class WebSocketMissionServer:
         if msg_type == "turtlebot.navigate":
             parsed = {"intent": "create_order", "command": msg.get("command", "dashboard navigate"), "destination": msg.get("destination", "A"), "parts": []}
             return self.navigate_turtlebot_from_speech(parsed, parsed["command"], execute=bool(msg.get("execute", False)))
-        if msg_type in {"turtlebot.pose", "nav.pose", "vision.detections", "vision.detection", "speech.stt.partial"}:
+        if msg_type in {"turtlebot.pose", "nav.pose", "vision.detections", "vision.detection", "speech.stt.partial", "task.status", "task_status"}:
             return self.passthrough_broadcast(msg)
         if msg_type == "speech.tts.done":
             return {"type": "speech.tts.ack", "text": msg.get("text", ""), "voice": msg.get("voice", "whisper-tts"), "status": "done"}
@@ -170,7 +205,7 @@ class WebSocketMissionServer:
             self.clients.discard(websocket)
 
 
-async def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
+async def serve(host: str = "0.0.0.0", port: int = 8765) -> None:
     if websockets is None:
         raise RuntimeError("Install websockets: python -m pip install websockets")
     server = WebSocketMissionServer()
