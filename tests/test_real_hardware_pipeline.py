@@ -64,14 +64,13 @@ def test_turtlebot_command_builder_sets_ros_domain_id_34_and_goal_pose():
     local = cmd[-1]
     assert "export ROS_DOMAIN_ID=34" in local
     assert "source ~/turtlebot3_ws/install/setup.bash" in local
-    assert "ros2 action send_goal" in local
-    assert "/navigate_to_pose" in local
+    assert "ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped" in local
     assert "position" in local
-    assert '\"stamp\": {\"sec\": 0, \"nanosec\": 0}' in local
+    assert "frame_id:" in local and "map" in local
     assert config.turtlebot.pose_for("A").yaw == -1.5708
     assert config.turtlebot.pose_for("B").yaw == -1.5708
-    assert '\"z\": -0.707' in local
-    assert '\"w\": 0.707' in local
+    assert 'z: -0.707' in local
+    assert 'w: 0.707' in local
 
 
 def test_server_can_report_real_hardware_status_without_connecting_to_devices():
@@ -126,9 +125,9 @@ def test_turtlebot_command_builder_can_generate_return_home_navigation():
 
     remote = cmd[-1]
     assert "export ROS_DOMAIN_ID=34" in remote
-    assert "ros2 action send_goal" in remote
-    assert '"x": 0.057' in remote
-    assert '"y": -0.0714' in remote
+    assert "ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped" in remote
+    assert "x: 0.057" in remote
+    assert "y: -0.0714" in remote
 
 
 def test_turtlebot_command_builder_generates_nav2_dwell_return_round_trip():
@@ -140,10 +139,10 @@ def test_turtlebot_command_builder_generates_nav2_dwell_return_round_trip():
 
     assert cmd[:2] == ["bash", "-lc"]
     assert "export ROS_DOMAIN_ID=34" in remote
-    assert remote.count("ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose") == 2
+    assert remote.count("ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped") == 2
     assert "sleep 3" in remote
-    assert '"x": 0.057' in remote  # HOME return pose
-    assert '"y": -1.32' in remote  # B destination pose
+    assert "x: 0.057" in remote  # HOME return pose
+    assert "y: -1.32" in remote  # B destination pose
 
 
 def test_turtlebot_delivery_round_trip_cli_dry_run_outputs_three_steps():
@@ -210,7 +209,7 @@ def test_server_maps_home_stt_transcript_to_home_navigation_dry_run():
 
     assert isinstance(result, list)
     assert [event["type"] for event in result] == ["speech.stt.final", "factory.state", "hardware.command_result"]
-    assert result[1]["state"] == "DELIVERY_NAVIGATING"
+    assert result[1]["state"] == "RETURNING_HOME"
     assert result[1]["payload"]["speech"]["destination"] == "HOME"
     assert result[1]["payload"]["speech"]["parts"] == []
     assert result[2]["subsystem"] == "turtlebot"
@@ -257,7 +256,7 @@ def test_server_can_dry_run_direct_turtlebot_navigation_from_stt():
     assert result[2]["subsystem"] == "turtlebot"
     assert result[2]["action"] == "navigate_B"
     assert result[2]["executed"] is False
-    assert "ros2 action send_goal" in result[2]["command"][-1]
+    assert "ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped" in result[2]["command"][-1]
 
 
 def test_server_passthroughs_turtlebot_pose_messages_for_dashboard_broadcast():
@@ -267,3 +266,56 @@ def test_server_passthroughs_turtlebot_pose_messages_for_dashboard_broadcast():
     result = asyncio.run(server.handle_message(json.dumps(payload, ensure_ascii=False)))
 
     assert result == payload
+
+
+def test_server_passthroughs_task_status_messages_for_dashboard_progress():
+    server = WebSocketMissionServer()
+    payload = {"type": "task.status", "topic": "/task_status", "status": "SORTING_NORMAL_run=0"}
+
+    result = asyncio.run(server.handle_message(json.dumps(payload, ensure_ascii=False)))
+
+    assert result == payload
+
+
+def test_server_marks_delivery_complete_when_active_non_home_goal_pose_arrives():
+    server = WebSocketMissionServer()
+    server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "B구역으로 가"})
+    target = server.hardware_config.turtlebot.pose_for("B")
+
+    result = asyncio.run(server.handle_message(json.dumps({
+        "type": "turtlebot.pose",
+        "pose": {"x": target.x + 0.03, "y": target.y - 0.02, "yaw": target.yaw},
+        "status": "실시간 pose 수신",
+    }, ensure_ascii=False)))
+
+    assert isinstance(result, list)
+    assert result[0]["type"] == "turtlebot.pose"
+    assert result[1]["type"] == "factory.state"
+    assert result[1]["state"] == "DELIVERED"
+    assert result[1]["payload"]["destination"] == "B"
+
+
+def test_server_marks_return_home_arrival_when_active_home_goal_pose_arrives():
+    server = WebSocketMissionServer()
+    server.handle_whisper_transcript({"type": "speech.stt.final", "transcript": "홈 위치로 이동"})
+    target = server.hardware_config.turtlebot.pose_for("HOME")
+
+    result = asyncio.run(server.handle_message(json.dumps({
+        "type": "turtlebot.pose",
+        "pose": {"x": target.x, "y": target.y, "yaw": target.yaw},
+        "status": "실시간 pose 수신",
+    }, ensure_ascii=False)))
+
+    assert isinstance(result, list)
+    assert result[0]["type"] == "turtlebot.pose"
+    assert result[1]["type"] == "factory.state"
+    assert result[1]["state"] == "RETURNING_HOME"
+    assert result[1]["payload"]["destination"] == "HOME"
+    assert result[1]["payload"]["arrived"] is True
+
+
+def test_websocket_server_binds_all_interfaces_for_network_dashboard_access():
+    app_source = DEFAULT_CONFIG_PATH.parents[1].joinpath("server/app.py").read_text(encoding="utf-8")
+
+    assert 'async def serve(host: str = "0.0.0.0"' in app_source
+    assert 'WebSocket mission server listening on ws://{host}:{port}' in app_source

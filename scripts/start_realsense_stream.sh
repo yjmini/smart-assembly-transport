@@ -39,4 +39,5 @@ exec /usr/bin/python3 scripts/realsense_mjpeg_bridge.py \
   "${COMPRESSED_ARG[@]}" \
   --host "${REALSENSE_STREAM_HOST:-127.0.0.1}" \
   --port "${REALSENSE_STREAM_PORT:-8080}" \
-  --jpeg-quality "${REALSENSE_JPEG_QUALITY:-80}"
+  --jpeg-quality "${REALSENSE_JPEG_QUALITY:-80}" \
+  --durability "${REALSENSE_DURABILITY:-transient_local}"
