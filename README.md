@@ -1,8 +1,10 @@
 # 자동 조립 공정 및 무인 배송 시스템
 
-음성 명령을 기반으로 컨베이어, 비전, Dobot 로봇팔, TurtleBot을 연동하여 **제품 조립 → 품질 확인 → 무인 배송**까지 수행하는 스마트팩토리 통합 프로젝트입니다.
+음성 명령을 시작점으로 컨베이어, 비전, Dobot 로봇팔, TurtleBot, 웹 대시보드를 연결해 **제품 조립 → 품질 확인 → 무인 배송** 흐름을 수행하는 스마트팩토리 통합 프로젝트입니다.
 
-본 프로젝트는 단일 기능 구현보다 여러 로봇/AI 모듈이 하나의 공정으로 연결되는 것을 목표로 합니다.
+## 프로젝트 개요
+
+이 프로젝트는 단일 로봇 제어보다 여러 모듈을 하나의 공정 상태로 묶는 데 초점을 둡니다. ROS 2 기반 공정 FSM, Django/Vue 대시보드, WebSocket bridge, Raspberry Pi conveyor script, Dobot/TurtleBot 제어 패키지를 함께 구성했습니다.
 
 ## 핵심 시나리오
 
@@ -19,44 +21,69 @@
 
 ## 주요 기능
 
-- STT 기반 작업 명령 입력
-- 컨베이어 구동 및 정위치 정지
-- YOLO/OpenCV 기반 부품·손·완성품 인식
-- 사람 손 감지 시 비상 정지 및 관리자 승인 후 복구
-- Dobot 로봇팔 기반 다단계 조립 및 적재
-- TurtleBot3 SLAM/Nav2 기반 무인 배송
-- 대시보드 기반 작업 상태 모니터링
-- TTS 기반 완료/경고 안내
+- STT 기반 작업 명령 입력과 작업 오더 생성
+- 컨베이어 구동, 정지, 분류 명령 처리
+- YOLO/OpenCV 기반 부품·손·완성품 인식 흐름
+- 손 감지 시 비상 정지 및 관리자 승인 후 복구
+- Dobot 조립 및 TurtleBot 배송 단계 제어
+- Django API + Vue 대시보드 기반 상태 모니터링
+- WebSocket bridge 기반 공정 이벤트 전달
+- 실제 장비 전환 전 로컬 mock runner와 테스트 코드 제공
+
+## 기술 스택
+
+- **Robotics**: ROS 2, rclpy, TurtleBot3/Nav2, Dobot
+- **Vision**: OpenCV, YOLO-style detector interface
+- **Backend**: Django, Python WebSocket server
+- **Frontend**: Vue, Chart.js
+- **Edge**: Raspberry Pi conveyor scripts
+- **Test**: pytest, mock scenario runner
 
 ## Repository Structure
 
 ```text
-server/             작업 오더, 상태 이벤트, WebSocket API
-web/                공정 모니터링 및 비상 복구 대시보드
-sem1_pjt_ws/        ROS 2 기반 로봇/공정 제어 워크스페이스
-  src/
-    mission_orchestrator/   전체 공정 FSM 및 모듈 통합
-    vision_detector/        부품/손/QC 비전 인식
-    conveyor_controller/    컨베이어 구동/정지 제어
-    dobot_controller/       Dobot 조립 및 적재 제어
-    turtlebot_delivery/     TurtleBot 배송 목표 제어
-    hri_interfaces/         STT/TTS 및 웹 연동 인터페이스
-docs/               프로젝트 기획, 아키텍처, 인터페이스, 일정 문서
-sample-data/        테스트 이미지, 영상, 지도, 예제 입력 데이터
+.
+├── server/                 # WebSocket bridge 및 공정 이벤트 서버
+├── dashboard_backend/      # Django API, order/event/detection 모델
+├── web/                    # Vue 대시보드
+├── sem1_pjt_ws/            # ROS 2 공정 제어 workspace
+│   └── src/
+│       ├── mission_orchestrator/
+│       ├── vision_detector/
+│       ├── conveyor_controller/
+│       ├── dobot_controller/
+│       ├── turtlebot_delivery/
+│       └── hri_interfaces/
+├── hardware/conveyor_pi/   # Raspberry Pi conveyor standalone scripts
+├── assets/stl/car/         # 조립 대상 STL asset
+├── docs/                   # 설계/실행/인터페이스 문서
+├── tests/                  # mock scenario 및 API 테스트
+└── scripts/                # 개발/실행 보조 스크립트
 ```
 
-> 현재 repository는 하드웨어 없이도 mock 공정 흐름을 먼저 검증할 수 있도록 `sem1_pjt_ws` 기반 Python/ROS 2 scaffold와 WebSocket bridge 초안을 포함합니다.
+## 핵심 구현 내용
+
+### 1. Mission Orchestrator FSM
+`mission_orchestrator`가 공정 상태를 관리하고 비전, 컨베이어, Dobot, TurtleBot, HRI 모듈의 이벤트를 하나의 흐름으로 연결합니다.
+
+### 2. Dashboard Backend
+`dashboard_backend.operations`에는 `Order`, `FactoryEvent`, `VisionDetection` 모델이 정의되어 있어 작업 오더와 공정 이벤트를 API/DB 관점에서 관리할 수 있습니다.
+
+### 3. Hardware Script 분리
+Raspberry Pi conveyor 제어 코드는 `hardware/conveyor_pi/`에 따로 두어 edge controller로 복사해 실행할 수 있게 했습니다.
+
+### 4. Mock-first 검증
+실제 장비 없이도 `pytest`와 mock runner로 공정 FSM, 이벤트 흐름, WebSocket bridge를 먼저 검증할 수 있습니다.
 
 ## Local Mock Quick Start
 
 ```bash
-cd /home/ssafy/smart-assembly-transport
 python3 -m pip install -r requirements-dev.txt
 python3 -m pytest -q
 python3 -m sem1_pjt_ws.src.mission_orchestrator.mission_orchestrator.mock_runner
 ```
 
-WebSocket bridge는 다음으로 실행합니다.
+WebSocket bridge는 다음 명령으로 실행합니다.
 
 ```bash
 python3 -m server.app
@@ -64,16 +91,14 @@ python3 -m server.app
 
 ## Vue/Django Dashboard Quick Start
 
-새 대시보드는 Vue.js + Vue Router + Chart.js 프론트엔드와 Django API 백엔드를 사용합니다. 운영 환경 DB는 MySQL을 기본값으로 사용합니다.
-
 ```bash
-# Frontend build
-cd /home/ssafy/smart-assembly-transport/web
+# Frontend
+cd web
 npm install
 npm run build
 
-# Django backend + MySQL 설정 예시
-cd /home/ssafy/smart-assembly-transport
+# Django backend
+cd ..
 export SMART_ASSEMBLY_DB_NAME=smart_assembly_transport
 export SMART_ASSEMBLY_DB_USER=smart_assembly
 export SMART_ASSEMBLY_DB_PASSWORD=smart_assembly
@@ -81,7 +106,7 @@ python3 manage.py migrate
 python3 manage.py runserver 0.0.0.0:8000
 ```
 
-로컬 개발 PC에 MySQL 서버가 없을 때만 다음 fallback으로 Django API와 Vue build를 검증할 수 있습니다.
+로컬에서 MySQL 없이 확인할 때는 SQLite fallback을 사용할 수 있습니다.
 
 ```bash
 SMART_ASSEMBLY_DB_BACKEND=sqlite python3 manage.py migrate
@@ -90,7 +115,7 @@ SMART_ASSEMBLY_DB_BACKEND=sqlite python3 manage.py runserver 127.0.0.1:8000
 
 ## Documentation
 
-프로젝트 상세 기획은 [`docs/`](./docs/README.md)에 정리합니다.
+상세 기획과 실행 문서는 [`docs/`](./docs/README.md)에 정리되어 있습니다.
 
 | # | 문서 | 내용 |
 |---|---|---|
@@ -99,20 +124,8 @@ SMART_ASSEMBLY_DB_BACKEND=sqlite python3 manage.py runserver 127.0.0.1:8000
 | 03 | [하드웨어 구성](./docs/03-hardware.md) | 사용 장비, 역할, 검증 항목 |
 | 04 | [기술 스택](./docs/04-tech-stack.md) | ROS 2, Vision, Web, STT/TTS |
 | 05 | [데이터 모델 / 인터페이스](./docs/05-data-model.md) | ROS 2 토픽, 이벤트, API 초안 |
-| 06 | [단계별 목표](./docs/06-stages.md) | 1주일 MVP 단계별 산출물 |
-| 07 | [역할 및 일정](./docs/07-roles-and-schedule.md) | WBS, Kanban 운영, 일정 |
-| 08 | [STT/TTS 설계](./docs/08-stt-tts.md) | 음성 명령, 응답, fallback |
-| 09 | [데모 시나리오](./docs/09-demo-scenario.md) | 시연 흐름, 촬영/발표 기준 |
-| 10 | [위험 요소](./docs/10-risks.md) | 리스크와 대응 전략 |
-| 11 | [인터페이스 합의서](./docs/11-interfaces.md) | 모듈 간 합의가 필요한 계약 |
-| 12 | [하드웨어 임의값 목록](./docs/12-placeholder-hardware-values.md) | 실측/보정이 필요한 mock 좌표와 설정 |
 | 13 | [로컬 Mock 실행 가이드](./docs/13-local-mock-runbook.md) | 테스트, mock runner, WebSocket 실행 |
 | 14 | [실제 하드웨어 실행 가이드](./docs/14-real-hardware-runbook.md) | 실제 Conveyor/TurtleBot/Dobot dry-run 및 실행 |
-| 15 | [참고 프로젝트 고도화 적용 기준](./docs/15-reference-adaptation.md) | project_pill 참고 패턴 적용 기준 |
 
-## 개발 원칙
-
-- 공정 전체 흐름을 먼저 mock으로 연결한 뒤 실제 하드웨어 노드로 교체합니다.
-- 안전 정지는 모든 기능보다 우선합니다.
-- ROS 2 인터페이스와 상태 이벤트는 초기에 고정하고 문서 변경 없이 임의 수정하지 않습니다.
-- 데모 성공을 위해 실제 장비 실패 시 사용할 fallback 경로를 항상 유지합니다.
+---
+ROS 2와 웹 대시보드를 연결해 조립 공정과 배송 흐름을 통합한 스마트팩토리 프로젝트입니다.
